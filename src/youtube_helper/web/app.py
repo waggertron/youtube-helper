@@ -24,12 +24,14 @@ def create_app(db_path: str | None = None) -> FastAPI:
     from youtube_helper.web.events import EventBroadcaster
     from youtube_helper.web.routes.auth import router as auth_router
     from youtube_helper.web.routes.events import router as events_router
+    from youtube_helper.web.routes.playlists import router as playlists_router
     from youtube_helper.web.routes.search import router as search_router
     from youtube_helper.web.routes.sync import router as sync_router
 
     app.state.broadcaster = EventBroadcaster()
     app.include_router(auth_router)
     app.include_router(events_router)
+    app.include_router(playlists_router)
     app.include_router(search_router)
     app.include_router(sync_router)
 
