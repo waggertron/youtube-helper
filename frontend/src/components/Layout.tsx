@@ -1,6 +1,6 @@
 import {
   Box, Drawer, List, ListItemButton, ListItemIcon, ListItemText,
-  AppBar, Toolbar, Typography, IconButton,
+  AppBar, Toolbar, Typography, IconButton, Badge,
 } from '@mui/material'
 import {
   Dashboard as DashboardIcon,
@@ -10,9 +10,12 @@ import {
   ThumbUp,
   Settings,
   Menu as MenuIcon,
+  Queue as QueueIcon,
 } from '@mui/icons-material'
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useState } from 'react'
+import { useQueue } from '../hooks/useApi'
+import QueuePanel from './QueuePanel'
 
 const DRAWER_WIDTH = 240
 
@@ -29,6 +32,12 @@ export default function Layout() {
   const navigate = useNavigate()
   const location = useLocation()
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [queueOpen, setQueueOpen] = useState(false)
+  const { data } = useQueue()
+  const operations = data?.operations ?? []
+  const activeCount = operations.filter(
+    (op) => op.status === 'active' || op.status === 'pending',
+  ).length
 
   const drawer = (
     <Box>
@@ -68,6 +77,15 @@ export default function Layout() {
           <Typography variant="h6" noWrap sx={{ flexGrow: 1 }}>
             YouTube Helper
           </Typography>
+          <IconButton
+            aria-label="open queue panel"
+            color="inherit"
+            onClick={() => setQueueOpen(!queueOpen)}
+          >
+            <Badge badgeContent={activeCount} color="error">
+              <QueueIcon />
+            </Badge>
+          </IconButton>
         </Toolbar>
       </AppBar>
       <Drawer
@@ -84,6 +102,11 @@ export default function Layout() {
       <Box component="main" sx={{ flexGrow: 1, p: 3, mt: 8 }}>
         <Outlet />
       </Box>
+      <QueuePanel
+        operations={operations}
+        open={queueOpen}
+        onClose={() => setQueueOpen(false)}
+      />
     </Box>
   )
 }
