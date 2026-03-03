@@ -75,8 +75,8 @@ def create_app(db_path: str | None = None) -> FastAPI:
 
         @app.get("/{full_path:path}")
         async def serve_spa(full_path: str):
-            file_path = frontend_dist / full_path
-            if file_path.exists() and file_path.is_file():
+            file_path = (frontend_dist / full_path).resolve()
+            if file_path.is_relative_to(frontend_dist) and file_path.is_file():
                 return FileResponse(file_path)
             return FileResponse(frontend_dist / "index.html")
 

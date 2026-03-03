@@ -40,7 +40,7 @@ def web(port: int, no_browser: bool, dev: bool) -> None:
 
     uvicorn.run(
         "youtube_helper.web.app:create_app",
-        host="0.0.0.0",
+        host="127.0.0.1",
         port=port,
         reload=dev,
         factory=True,
