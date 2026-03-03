@@ -1,3 +1,6 @@
+import asyncio
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -9,7 +12,18 @@ def create_app(db_path: str | None = None) -> FastAPI:
     settings = Settings()
     resolved_db_path = db_path or str(settings.db_path)
 
-    app = FastAPI(title="YouTube Helper", version="0.1.0")
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        from youtube_helper.web.processor import QueueProcessor
+
+        processor = QueueProcessor(app.state.db_path, app.state.broadcaster)
+        app.state.processor = processor
+        task = asyncio.create_task(processor.run())
+        yield
+        processor.stop()
+        task.cancel()
+
+    app = FastAPI(title="YouTube Helper", version="0.1.0", lifespan=lifespan)
 
     app.add_middleware(
         CORSMiddleware,
@@ -25,6 +39,7 @@ def create_app(db_path: str | None = None) -> FastAPI:
     from youtube_helper.web.routes.auth import router as auth_router
     from youtube_helper.web.routes.events import router as events_router
     from youtube_helper.web.routes.playlists import router as playlists_router
+    from youtube_helper.web.routes.queue import router as queue_router
     from youtube_helper.web.routes.search import router as search_router
     from youtube_helper.web.routes.sync import router as sync_router
     from youtube_helper.web.routes.videos import router as videos_router
@@ -34,6 +49,7 @@ def create_app(db_path: str | None = None) -> FastAPI:
     app.include_router(auth_router)
     app.include_router(events_router)
     app.include_router(playlists_router)
+    app.include_router(queue_router)
     app.include_router(search_router)
     app.include_router(sync_router)
     app.include_router(videos_router)
