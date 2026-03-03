@@ -3,6 +3,7 @@ from rich.console import Console
 
 from youtube_helper.cli.auth import auth
 from youtube_helper.cli.db import db
+from youtube_helper.cli.sync import sync
 
 console = Console()
 
@@ -19,3 +20,4 @@ def cli(ctx: click.Context, verbose: bool) -> None:
 
 cli.add_command(auth)
 cli.add_command(db)
+cli.add_command(sync)
