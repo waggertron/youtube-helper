@@ -4,6 +4,7 @@ from rich.console import Console
 from youtube_helper.cli.auth import auth
 from youtube_helper.cli.db import db
 from youtube_helper.cli.sync import sync
+from youtube_helper.cli.watch_later import watch_later
 
 console = Console()
 
@@ -21,3 +22,4 @@ def cli(ctx: click.Context, verbose: bool) -> None:
 cli.add_command(auth)
 cli.add_command(db)
 cli.add_command(sync)
+cli.add_command(watch_later)
