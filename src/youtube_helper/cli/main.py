@@ -12,3 +12,8 @@ def cli(ctx: click.Context, verbose: bool) -> None:
     """yt — YouTube Helper CLI for managing playlists and content."""
     ctx.ensure_object(dict)
     ctx.obj["verbose"] = verbose
+
+
+from youtube_helper.cli.db import db
+
+cli.add_command(db)
