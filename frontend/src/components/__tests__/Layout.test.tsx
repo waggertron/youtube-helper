@@ -1,22 +1,6 @@
-import { render, screen } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { ThemeProvider } from '@mui/material'
-import theme from '../../theme'
+import { screen } from '@testing-library/react'
+import { renderWithProviders } from '../../test/render'
 import Layout from '../Layout'
-
-function renderWithProviders(ui: React.ReactElement, route = '/') {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  return render(
-    <QueryClientProvider client={queryClient}>
-      <ThemeProvider theme={theme}>
-        <MemoryRouter initialEntries={[route]}>
-          {ui}
-        </MemoryRouter>
-      </ThemeProvider>
-    </QueryClientProvider>
-  )
-}
 
 describe('Layout', () => {
   it('renders the sidebar with navigation items', () => {

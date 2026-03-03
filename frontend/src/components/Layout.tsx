@@ -57,6 +57,7 @@ export default function Layout() {
       <AppBar position="fixed" sx={{ zIndex: (theme) => theme.zIndex.drawer + 1 }}>
         <Toolbar>
           <IconButton
+            aria-label="open navigation menu"
             color="inherit"
             edge="start"
             onClick={() => setMobileOpen(!mobileOpen)}
