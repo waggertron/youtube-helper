@@ -50,6 +50,7 @@ def run_migrations(db_path: str) -> list[int]:
             continue
         sql = path.read_text()
         conn.executescript(sql)
+        conn.execute("PRAGMA foreign_keys=ON")
         conn.execute(
             "INSERT INTO _schema_versions (version, name) VALUES (?, ?)",
             (version, name),

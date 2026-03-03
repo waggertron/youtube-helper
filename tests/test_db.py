@@ -1,6 +1,5 @@
 import sqlite3
-from pathlib import Path
-import pytest
+
 from youtube_helper.db.connection import get_connection
 from youtube_helper.db.migrations import get_current_version, run_migrations
 

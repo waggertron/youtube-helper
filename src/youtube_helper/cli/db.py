@@ -14,7 +14,11 @@ def db() -> None:
 
 
 @db.command()
-@click.option("--db-path", default="~/.youtube-helper/youtube-helper.db", help="Path to SQLite database.")
+@click.option(
+    "--db-path",
+    default="~/.youtube-helper/youtube-helper.db",
+    help="Path to SQLite database.",
+)
 def init(db_path: str) -> None:
     """Initialize the database and run all migrations."""
     import os
@@ -39,7 +43,11 @@ def init(db_path: str) -> None:
 
 
 @db.command()
-@click.option("--db-path", default="~/.youtube-helper/youtube-helper.db", help="Path to SQLite database.")
+@click.option(
+    "--db-path",
+    default="~/.youtube-helper/youtube-helper.db",
+    help="Path to SQLite database.",
+)
 def status(db_path: str) -> None:
     """Show current migration status."""
     from pathlib import Path
