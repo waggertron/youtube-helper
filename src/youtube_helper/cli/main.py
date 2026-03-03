@@ -1,6 +1,7 @@
 import click
 from rich.console import Console
 
+from youtube_helper.cli.auth import auth
 from youtube_helper.cli.db import db
 
 console = Console()
@@ -16,4 +17,5 @@ def cli(ctx: click.Context, verbose: bool) -> None:
     ctx.obj["verbose"] = verbose
 
 
+cli.add_command(auth)
 cli.add_command(db)
