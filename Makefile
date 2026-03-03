@@ -1,4 +1,4 @@
-.PHONY: install install-dev setup test lint format clean dev build-ui run
+.PHONY: install install-dev setup test test-ui test-all lint format clean dev build-ui run
 
 install: ## Install the package
 	uv venv
@@ -14,8 +14,15 @@ setup: install-dev ## Full setup: install + init database + auth
 	yt db init
 	yt auth setup
 
-test: ## Run tests
+test: ## Run backend tests
 	pytest
+
+test-ui: ## Run frontend tests
+	cd frontend && npx vitest run
+
+test-all: ## Run backend and frontend tests
+	pytest -v
+	cd frontend && npx vitest run
 
 lint: ## Run linter
 	ruff check src tests
@@ -23,14 +30,17 @@ lint: ## Run linter
 format: ## Auto-fix lint issues
 	ruff check --fix src tests
 
-dev: ## Run API and frontend dev servers concurrently
+dev: ## Run API + frontend dev servers
 	@echo "Starting FastAPI on :8000 and Vite on :5173..."
-	@(cd frontend && npm run dev) & yt web --dev --no-browser --port 8000
+	@trap 'kill 0' EXIT; \
+	(yt web --dev --no-browser --port 8000) & \
+	(cd frontend && npm run dev) & \
+	wait
 
-build-ui: ## Build the frontend for production
-	cd frontend && npm run build
+build-ui: ## Build frontend for production
+	cd frontend && npm install && npm run build
 
-run: ## Start the production server (API + built frontend)
+run: build-ui ## Build frontend and start production server
 	yt web
 
 clean: ## Remove build artifacts and cache

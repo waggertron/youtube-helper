@@ -182,6 +182,31 @@ Options:
   --help         Show help
 ```
 
+## Web Dashboard
+
+Start the web UI:
+
+```bash
+yt web                    # Build frontend + start server + open browser
+yt web --port 3000        # Custom port
+yt web --no-browser       # Don't auto-open browser
+```
+
+For development with hot reload:
+
+```bash
+make dev                  # Starts API on :8000, frontend on :5173
+```
+
+The dashboard provides:
+- **Dashboard** — Overview stats, quick sync/scrape buttons
+- **Playlists** — Browse, create, delete playlists; manage videos
+- **Watch Later** — View progress, export, purge, prune
+- **Search** — Fuzzy search across all videos and playlists
+- **Liked Videos** — View and manage liked videos
+- **Settings** — Auth status and configuration
+- **Operation Queue** — Track progress of all operations in real-time
+
 ## Architecture
 
 ```
@@ -234,7 +259,8 @@ Config and data stored in `~/.youtube-helper/`:
 ```bash
 uv venv
 uv pip install -e ".[dev]"
-pytest -v                       # Run tests (65 tests)
+pytest -v                       # Run backend tests (109 tests)
+cd frontend && npx vitest run   # Run frontend tests (93 tests)
 ruff check                      # Lint
 ```
 
