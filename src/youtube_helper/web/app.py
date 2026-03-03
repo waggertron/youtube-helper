@@ -21,6 +21,12 @@ def create_app(db_path: str | None = None) -> FastAPI:
 
     app.state.db_path = resolved_db_path
 
+    from youtube_helper.web.events import EventBroadcaster
+    from youtube_helper.web.routes.events import router as events_router
+
+    app.state.broadcaster = EventBroadcaster()
+    app.include_router(events_router)
+
     @app.get("/api/health")
     async def health():
         return {"status": "ok", "version": "0.1.0"}
