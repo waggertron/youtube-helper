@@ -8,6 +8,7 @@ from youtube_helper.cli.playlist import playlist
 from youtube_helper.cli.search import search
 from youtube_helper.cli.sync import sync
 from youtube_helper.cli.watch_later import watch_later
+from youtube_helper.cli.web import web
 
 console = Console()
 
@@ -29,3 +30,4 @@ cli.add_command(playlist)
 cli.add_command(search)
 cli.add_command(sync)
 cli.add_command(watch_later)
+cli.add_command(web)

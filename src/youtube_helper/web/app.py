@@ -61,4 +61,23 @@ def create_app(db_path: str | None = None) -> FastAPI:
     async def health():
         return {"status": "ok", "version": "0.1.0"}
 
+    # Serve built frontend static files in production
+    from pathlib import Path
+
+    frontend_dist = Path(__file__).resolve().parent.parent.parent.parent / "frontend" / "dist"
+    if frontend_dist.exists():
+        from fastapi.responses import FileResponse
+        from fastapi.staticfiles import StaticFiles
+
+        assets_dir = frontend_dist / "assets"
+        if assets_dir.exists():
+            app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="assets")
+
+        @app.get("/{full_path:path}")
+        async def serve_spa(full_path: str):
+            file_path = frontend_dist / full_path
+            if file_path.exists() and file_path.is_file():
+                return FileResponse(file_path)
+            return FileResponse(frontend_dist / "index.html")
+
     return app
