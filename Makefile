@@ -11,29 +11,29 @@ install-dev: ## Install with dev dependencies
 	playwright install chromium
 
 setup: install-dev ## Full setup: install + init database + auth
-	yt db init
-	yt auth setup
+	uv run yt db init
+	uv run yt auth setup
 
 test: ## Run backend tests
-	pytest
+	uv run pytest
 
 test-ui: ## Run frontend tests
 	cd frontend && npx vitest run
 
 test-all: ## Run backend and frontend tests
-	pytest -v
+	uv run pytest -v
 	cd frontend && npx vitest run
 
 lint: ## Run linter
-	ruff check src tests
+	uv run ruff check src tests
 
 format: ## Auto-fix lint issues
-	ruff check --fix src tests
+	uv run ruff check --fix src tests
 
 dev: ## Run API + frontend dev servers
 	@echo "Starting FastAPI on :8000 and Vite on :5173..."
 	@trap 'kill 0' EXIT; \
-	(yt web --dev --no-browser --port 8000) & \
+	(uv run yt web --dev --no-browser --port 8000) & \
 	(cd frontend && npm run dev) & \
 	wait
 
@@ -41,7 +41,7 @@ build-ui: ## Build frontend for production
 	cd frontend && npm install && npm run build
 
 run: build-ui ## Build frontend and start production server
-	yt web
+	uv run yt web
 
 clean: ## Remove build artifacts and cache
 	rm -rf build dist *.egg-info .pytest_cache .ruff_cache
