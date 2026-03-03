@@ -14,9 +14,11 @@ def create_app(db_path: str | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        from youtube_helper.web.handlers import register_all_handlers
         from youtube_helper.web.processor import QueueProcessor
 
         processor = QueueProcessor(app.state.db_path, app.state.broadcaster)
+        register_all_handlers(processor)
         app.state.processor = processor
         task = asyncio.create_task(processor.run())
         yield
