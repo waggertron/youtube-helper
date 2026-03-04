@@ -16,8 +16,10 @@ htmlcov/
 *.db-journal
 *.db-wal
 token.pickle
+token.json
 credentials.json
 client_secret*.json
+oauth*.json
 
 # Chrome profile copies (created by scraper)
 yt-helper-chrome-*/
