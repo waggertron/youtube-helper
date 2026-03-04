@@ -30,7 +30,7 @@ class WatchLaterManager:
                    ON CONFLICT(id) DO UPDATE SET
                        title=excluded.title,
                        channel_name=excluded.channel_name,
-                       duration=excluded.duration,
+                       duration=CASE WHEN excluded.duration > 0 THEN excluded.duration ELSE duration END,
                        watch_progress=excluded.watch_progress,
                        thumbnail_url=excluded.thumbnail_url,
                        last_synced=excluded.last_synced""",

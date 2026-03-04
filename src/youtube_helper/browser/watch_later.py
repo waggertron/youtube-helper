@@ -188,9 +188,21 @@ async def scrape_watch_later(
                     else ""
                 )
 
+                # Try multiple selectors for duration
+                # (YouTube's DOM changes frequently)
                 duration_el = await renderer.query_selector(
                     "ytd-thumbnail-overlay-time-status-renderer #text"
                 )
+                if not duration_el:
+                    duration_el = await renderer.query_selector(
+                        "ytd-thumbnail-overlay-time-status-renderer"
+                        " span"
+                    )
+                if not duration_el:
+                    duration_el = await renderer.query_selector(
+                        "#overlays"
+                        " ytd-thumbnail-overlay-time-status-renderer"
+                    )
                 duration_text = (
                     (await duration_el.inner_text()).strip()
                     if duration_el

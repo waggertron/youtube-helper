@@ -115,6 +115,90 @@ class TestSaveScrapedVideos:
         conn.close()
 
 
+    def test_does_not_overwrite_existing_duration_with_zero(self, db_path):
+        """When scrape fails to get duration (0), existing value is preserved."""
+        manager = WatchLaterManager(db_path)
+        # First scrape: save a video with a known duration
+        scraped_first = [
+            {
+                "video_id": "DUR1",
+                "title": "Duration Test",
+                "channel": "Test Channel",
+                "duration_seconds": 600,
+                "progress_percent": 25.0,
+                "thumbnail_url": "https://example.com/thumb.jpg",
+            }
+        ]
+        manager.save_scraped_videos(scraped_first)
+
+        # Verify duration was saved
+        conn = get_connection(db_path)
+        video = conn.execute(
+            "SELECT duration FROM videos WHERE id = 'DUR1'"
+        ).fetchone()
+        assert video["duration"] == 600
+        conn.close()
+
+        # Second scrape: duration scrape failed (0)
+        scraped_second = [
+            {
+                "video_id": "DUR1",
+                "title": "Duration Test",
+                "channel": "Test Channel",
+                "duration_seconds": 0,
+                "progress_percent": 50.0,
+                "thumbnail_url": "https://example.com/thumb.jpg",
+            }
+        ]
+        manager.save_scraped_videos(scraped_second)
+
+        # Duration should still be 600, not overwritten with 0
+        conn = get_connection(db_path)
+        video = conn.execute(
+            "SELECT duration, watch_progress FROM videos WHERE id = 'DUR1'"
+        ).fetchone()
+        assert video["duration"] == 600
+        # But other fields should still update
+        assert video["watch_progress"] == 50.0
+        conn.close()
+
+    def test_overwrites_duration_with_nonzero_scraped_value(self, db_path):
+        """When scrape gets a valid duration, it should update the DB."""
+        manager = WatchLaterManager(db_path)
+        # First scrape
+        scraped_first = [
+            {
+                "video_id": "DUR2",
+                "title": "Duration Test 2",
+                "channel": "Test Channel",
+                "duration_seconds": 600,
+                "progress_percent": 25.0,
+                "thumbnail_url": "",
+            }
+        ]
+        manager.save_scraped_videos(scraped_first)
+
+        # Second scrape with different (non-zero) duration
+        scraped_second = [
+            {
+                "video_id": "DUR2",
+                "title": "Duration Test 2",
+                "channel": "Test Channel",
+                "duration_seconds": 720,
+                "progress_percent": 25.0,
+                "thumbnail_url": "",
+            }
+        ]
+        manager.save_scraped_videos(scraped_second)
+
+        conn = get_connection(db_path)
+        video = conn.execute(
+            "SELECT duration FROM videos WHERE id = 'DUR2'"
+        ).fetchone()
+        assert video["duration"] == 720
+        conn.close()
+
+
 class TestRemoveVideosFromDb:
     def test_removes_videos(self, manager, seeded_db):
         removed = manager.remove_videos_from_db("WL", ["VID1", "VID2"])
