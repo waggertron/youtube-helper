@@ -129,7 +129,10 @@ export default function Playlists() {
       <ConfirmDialog
         open={deleteId !== null}
         title="Delete Playlist"
-        description="Permanently delete this playlist from YouTube. All videos in the playlist will be unlinked but not deleted from YouTube. This cannot be undone."
+        description={(() => {
+          const playlistToDelete = playlists.find(p => p.id === deleteId)
+          return `Permanently delete "${playlistToDelete?.title}" and its ${playlistToDelete?.video_count ?? 0} videos from YouTube. This cannot be undone.`
+        })()}
         onConfirm={() => {
           if (deleteId) deleteMutation.mutate(deleteId)
         }}

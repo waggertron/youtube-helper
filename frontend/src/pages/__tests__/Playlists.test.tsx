@@ -101,7 +101,7 @@ describe('Playlists', () => {
     })
   })
 
-  it('opens confirm dialog when delete button clicked', async () => {
+  it('opens confirm dialog when delete button clicked with playlist name and video count', async () => {
     server.use(
       http.get('/api/playlists', () =>
         HttpResponse.json({
@@ -118,7 +118,7 @@ describe('Playlists', () => {
     })
     await user.click(screen.getByLabelText('Delete playlist'))
     await waitFor(() => {
-      expect(screen.getByText(/Permanently delete this playlist/)).toBeInTheDocument()
+      expect(screen.getByText(/Permanently delete "My Playlist" and its 5 videos/)).toBeInTheDocument()
     })
   })
 })

@@ -1,16 +1,20 @@
+import { useState } from 'react'
 import { Box, Typography, IconButton, Tooltip } from '@mui/material'
 import { ArrowBack } from '@mui/icons-material'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { usePlaylistVideos } from '../hooks/useApi'
 import { api } from '../api/client'
+import type { Video } from '../api/client'
 import VideoTable from '../components/VideoTable'
+import ConfirmDialog from '../components/ConfirmDialog'
 
 export default function PlaylistDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { data } = usePlaylistVideos(id!)
+  const [removeVideo, setRemoveVideo] = useState<Video | null>(null)
 
   const playlist = data?.playlist
   const videos = data?.videos ?? []
@@ -47,8 +51,22 @@ export default function PlaylistDetail() {
 
       <VideoTable
         videos={videos}
-        onRemove={(videoId) => removeMutation.mutate(videoId)}
+        onRemove={(videoId) => {
+          const video = videos.find(v => v.id === videoId)
+          if (video) setRemoveVideo(video)
+        }}
         onLike={(videoId) => likeMutation.mutate(videoId)}
+      />
+
+      <ConfirmDialog
+        open={removeVideo !== null}
+        title="Remove Video"
+        description={`Remove "${removeVideo?.title}" from "${playlist?.title}"?`}
+        onConfirm={() => {
+          if (removeVideo) removeMutation.mutate(removeVideo.id)
+          setRemoveVideo(null)
+        }}
+        onCancel={() => setRemoveVideo(null)}
       />
     </Box>
   )

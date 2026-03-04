@@ -20,6 +20,7 @@ export default function WatchLater() {
   const [threshold, setThreshold] = useState(80)
   const [confirmExport, setConfirmExport] = useState(false)
   const [confirmPurge, setConfirmPurge] = useState(false)
+  const [confirmPrune, setConfirmPrune] = useState(false)
 
   const { data } = useWatchLater()
   const scrape = useScrape()
@@ -43,8 +44,11 @@ export default function WatchLater() {
     setConfirmPurge(false)
   }
 
-  const handlePruneExports = () => {
+  const watchedCount = videos.filter(v => v.watch_progress >= threshold).length
+
+  const handlePruneConfirm = () => {
     pruneExports.mutate()
+    setConfirmPrune(false)
   }
 
   return (
@@ -88,7 +92,7 @@ export default function WatchLater() {
         <Tooltip title="Scan all Watch Later Export playlists and remove videos you've since watched. Helps keep export playlists clean over time. Uses API quota for list + remove operations.">
           <Button
             variant="contained"
-            onClick={handlePruneExports}
+            onClick={() => setConfirmPrune(true)}
             disabled={pruneExports.isPending}
           >
             Prune Exports
@@ -114,7 +118,7 @@ export default function WatchLater() {
       <ConfirmDialog
         open={confirmExport}
         title="Confirm Export"
-        description={`Export Watch Later videos with a ${threshold}% watch threshold. This will create a dated playlist and use API quota proportional to the number of videos.`}
+        description={`Export ${videos.length} Watch Later videos with a ${threshold}% watch threshold. This will create a dated playlist and use API quota proportional to the number of videos.`}
         onConfirm={handleExportConfirm}
         onCancel={() => setConfirmExport(false)}
       />
@@ -122,9 +126,17 @@ export default function WatchLater() {
       <ConfirmDialog
         open={confirmPurge}
         title="Confirm Purge"
-        description={`Purge videos watched above ${threshold}% from your Watch Later playlist. This opens Chrome and removes videos automatically.`}
+        description={`Purge ${watchedCount} video${watchedCount !== 1 ? 's' : ''} watched above ${threshold}% from your Watch Later playlist. This opens Chrome and removes videos automatically.`}
         onConfirm={handlePurgeConfirm}
         onCancel={() => setConfirmPurge(false)}
+      />
+
+      <ConfirmDialog
+        open={confirmPrune}
+        title="Confirm Prune"
+        description="Remove watched videos from all Watch Later Export playlists. This scans export playlists and removes videos you've since watched."
+        onConfirm={handlePruneConfirm}
+        onCancel={() => setConfirmPrune(false)}
       />
     </Box>
   )
