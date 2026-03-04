@@ -29,7 +29,10 @@ describe('PlaylistDetail', () => {
           })
         }
         return HttpResponse.json({ playlist: null, videos: [] }, { status: 404 })
-      })
+      }),
+      http.post('/api/playlists/:id/like-all', () =>
+        HttpResponse.json({ operation_id: 1, message: 'Like queued' }),
+      ),
     )
   })
 
@@ -128,6 +131,41 @@ describe('PlaylistDetail', () => {
     await user.click(screen.getByText('Cancel'))
     await waitFor(() => {
       expect(screen.queryByText('Remove Video')).not.toBeInTheDocument()
+    })
+  })
+
+  it('renders Like All button', async () => {
+    renderPlaylistDetail()
+    await waitFor(() => {
+      expect(screen.getByText('Like All')).toBeInTheDocument()
+    })
+  })
+
+  it('shows liked status on videos', async () => {
+    server.use(
+      http.get('/api/playlists/:id/videos', () =>
+        HttpResponse.json({
+          playlist: { id: 'PL1', title: 'My Playlist', description: '', privacy_status: 'private', video_count: 2, source: 'api', last_synced: '' },
+          videos: [
+            { id: 'V1', title: 'First Video', channel_name: 'Channel A', channel_id: 'CA', duration: 300, watch_progress: 50, thumbnail_url: '', published_at: '', position: 0, is_liked: 1 },
+            { id: 'V2', title: 'Second Video', channel_name: 'Channel B', channel_id: 'CB', duration: 180, watch_progress: 100, thumbnail_url: '', published_at: '', position: 1, is_liked: null },
+          ],
+        }),
+      ),
+    )
+    renderPlaylistDetail()
+    await waitFor(() => {
+      expect(screen.getByText('First Video')).toBeInTheDocument()
+    })
+    const likeButtons = screen.getAllByLabelText('Like')
+    expect(likeButtons[0]).toBeDisabled()
+    expect(likeButtons[1]).not.toBeDisabled()
+  })
+
+  it('renders view mode toggle', async () => {
+    renderPlaylistDetail()
+    await waitFor(() => {
+      expect(screen.getByLabelText('Grid view')).toBeInTheDocument()
     })
   })
 })

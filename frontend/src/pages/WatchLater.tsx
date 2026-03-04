@@ -7,6 +7,8 @@ import {
   Typography,
 } from '@mui/material'
 import VideoTable from '../components/VideoTable'
+import ViewModeToggle, { type ViewMode } from '../components/ViewModeToggle'
+import VideoPlayerDialog from '../components/VideoPlayerDialog'
 import ConfirmDialog from '../components/ConfirmDialog'
 import {
   useWatchLater,
@@ -21,6 +23,8 @@ export default function WatchLater() {
   const [confirmExport, setConfirmExport] = useState(false)
   const [confirmPurge, setConfirmPurge] = useState(false)
   const [confirmPrune, setConfirmPrune] = useState(false)
+  const [viewMode, setViewMode] = useState<ViewMode>('compact')
+  const [playingVideo, setPlayingVideo] = useState<string | null>(null)
 
   const { data } = useWatchLater()
   const scrape = useScrape()
@@ -53,9 +57,10 @@ export default function WatchLater() {
 
   return (
     <Box>
-      <Typography variant="h4" gutterBottom>
-        Watch Later
-      </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
+        <Typography variant="h4">Watch Later</Typography>
+        <ViewModeToggle value={viewMode} onChange={setViewMode} />
+      </Box>
 
       <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap' }}>
         <Tooltip title="Launch Chrome to scan your Watch Later playlist. This opens a browser window using your Chrome profile and scrolls through Watch Later to detect video metadata and watch progress from thumbnail progress bars. Uses zero API quota.">
@@ -113,7 +118,7 @@ export default function WatchLater() {
         />
       </Box>
 
-      <VideoTable videos={videos} />
+      <VideoTable videos={videos} viewMode={viewMode} onPlay={(videoId) => setPlayingVideo(videoId)} />
 
       <ConfirmDialog
         open={confirmExport}
@@ -138,6 +143,8 @@ export default function WatchLater() {
         onConfirm={handlePruneConfirm}
         onCancel={() => setConfirmPrune(false)}
       />
+
+      <VideoPlayerDialog videoId={playingVideo} onClose={() => setPlayingVideo(null)} />
     </Box>
   )
 }

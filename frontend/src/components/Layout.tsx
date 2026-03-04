@@ -53,6 +53,7 @@ export default function Layout() {
         qc.invalidateQueries({ queryKey: ['playlists'] })
         qc.invalidateQueries({ queryKey: ['watch-later'] })
         qc.invalidateQueries({ queryKey: ['liked-videos'] })
+        qc.invalidateQueries({ queryKey: ['all-videos'] })
       }
     }
   })
