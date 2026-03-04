@@ -7,6 +7,7 @@ import { usePlaylistVideos, useLikeAll } from '../hooks/useApi'
 import { api } from '../api/client'
 import type { Video } from '../api/client'
 import VideoTable from '../components/VideoTable'
+import VideoFilters from '../components/VideoFilters'
 import ViewModeToggle, { type ViewMode } from '../components/ViewModeToggle'
 import VideoPlayerDialog from '../components/VideoPlayerDialog'
 import ConfirmDialog from '../components/ConfirmDialog'
@@ -67,16 +68,20 @@ export default function PlaylistDetail() {
         <ViewModeToggle value={viewMode} onChange={setViewMode} />
       </Box>
 
-      <VideoTable
-        videos={videos}
-        viewMode={viewMode}
-        onRemove={(videoId) => {
-          const video = videos.find(v => v.id === videoId)
-          if (video) setRemoveVideo(video)
-        }}
-        onLike={(videoId) => likeMutation.mutate(videoId)}
-        onPlay={(videoId) => setPlayingVideo(videoId)}
-      />
+      <VideoFilters videos={videos} showLikedFilter>
+        {(filtered) => (
+          <VideoTable
+            videos={filtered}
+            viewMode={viewMode}
+            onRemove={(videoId) => {
+              const video = videos.find(v => v.id === videoId)
+              if (video) setRemoveVideo(video)
+            }}
+            onLike={(videoId) => likeMutation.mutate(videoId)}
+            onPlay={(videoId) => setPlayingVideo(videoId)}
+          />
+        )}
+      </VideoFilters>
 
       <ConfirmDialog
         open={removeVideo !== null}

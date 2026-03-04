@@ -70,11 +70,12 @@ describe('LikedVideos', () => {
     await waitFor(() => {
       expect(screen.getByText('My Liked Video')).toBeInTheDocument()
     })
+    // Videos are sorted alphabetically by title, so "Another Liked Video" is first
     const removeButtons = screen.getAllByLabelText('Remove')
     await user.click(removeButtons[0])
     await waitFor(() => {
       expect(screen.getByText('Unlike Video')).toBeInTheDocument()
-      expect(screen.getByText(/Unlike "My Liked Video"/)).toBeInTheDocument()
+      expect(screen.getByText(/Unlike "Another Liked Video"/)).toBeInTheDocument()
     })
   })
 

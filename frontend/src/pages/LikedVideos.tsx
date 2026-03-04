@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Box, Typography } from '@mui/material'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import VideoTable from '../components/VideoTable'
+import VideoFilters from '../components/VideoFilters'
 import ViewModeToggle, { type ViewMode } from '../components/ViewModeToggle'
 import VideoPlayerDialog from '../components/VideoPlayerDialog'
 import ConfirmDialog from '../components/ConfirmDialog'
@@ -30,15 +31,19 @@ export default function LikedVideos() {
         <ViewModeToggle value={viewMode} onChange={setViewMode} />
       </Box>
 
-      <VideoTable
-        videos={videos}
-        viewMode={viewMode}
-        onRemove={(videoId) => {
-          const video = videos.find(v => v.id === videoId)
-          if (video) setUnlikeVideo(video)
-        }}
-        onPlay={(videoId) => setPlayingVideo(videoId)}
-      />
+      <VideoFilters videos={videos}>
+        {(filtered) => (
+          <VideoTable
+            videos={filtered}
+            viewMode={viewMode}
+            onRemove={(videoId) => {
+              const video = videos.find(v => v.id === videoId)
+              if (video) setUnlikeVideo(video)
+            }}
+            onPlay={(videoId) => setPlayingVideo(videoId)}
+          />
+        )}
+      </VideoFilters>
 
       <ConfirmDialog
         open={unlikeVideo !== null}

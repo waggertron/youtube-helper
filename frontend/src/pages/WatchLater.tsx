@@ -7,6 +7,7 @@ import {
   Typography,
 } from '@mui/material'
 import VideoTable from '../components/VideoTable'
+import VideoFilters from '../components/VideoFilters'
 import ViewModeToggle, { type ViewMode } from '../components/ViewModeToggle'
 import VideoPlayerDialog from '../components/VideoPlayerDialog'
 import ConfirmDialog from '../components/ConfirmDialog'
@@ -118,7 +119,11 @@ export default function WatchLater() {
         />
       </Box>
 
-      <VideoTable videos={videos} viewMode={viewMode} onPlay={(videoId) => setPlayingVideo(videoId)} />
+      <VideoFilters videos={videos}>
+        {(filtered) => (
+          <VideoTable videos={filtered} viewMode={viewMode} onPlay={(videoId) => setPlayingVideo(videoId)} />
+        )}
+      </VideoFilters>
 
       <ConfirmDialog
         open={confirmExport}
