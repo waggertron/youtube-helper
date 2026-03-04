@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
   Alert,
@@ -15,21 +15,25 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material'
-import { useAuthStatus, useSync, useUploadSecret, useStartAuth } from '../hooks/useApi'
+import { useAuthStatus, useSync, useUploadSecret, useStartAuth, useResetDatabase } from '../hooks/useApi'
 import { useQueryClient } from '@tanstack/react-query'
+import ConfirmDialog from '../components/ConfirmDialog'
 
 export default function Settings() {
   const { data } = useAuthStatus()
   const sync = useSync()
   const uploadSecret = useUploadSecret()
   const startAuth = useStartAuth()
+  const resetDatabase = useResetDatabase()
   const qc = useQueryClient()
   const [searchParams, setSearchParams] = useSearchParams()
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [resetDialogOpen, setResetDialogOpen] = useState(false)
 
   const authenticated = data?.authenticated ?? false
   const hasClientSecret = data?.has_client_secret ?? false
   const authSuccess = searchParams.get('auth') === 'success'
+  const authError = searchParams.get('auth_error')
 
   // Clean up the query param and invalidate auth status when auth=success
   useEffect(() => {
@@ -78,6 +82,14 @@ export default function Settings() {
           {authSuccess && (
             <Alert severity="success" sx={{ mb: 2 }} onClose={handleDismissSuccess}>
               Successfully authenticated! You can now manage your YouTube playlists.
+            </Alert>
+          )}
+
+          {authError && (
+            <Alert severity="error" sx={{ mb: 2 }} onClose={() => setSearchParams({})}>
+              Authorization failed: {authError === 'access_denied'
+                ? 'Access was denied. Make sure your Google account is added as a test user in the OAuth consent screen.'
+                : authError}
             </Alert>
           )}
 
@@ -170,7 +182,7 @@ export default function Settings() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card sx={{ mb: 3 }}>
         <CardContent>
           <Typography variant="h6" gutterBottom>
             Sync
@@ -190,6 +202,47 @@ export default function Settings() {
           </Tooltip>
         </CardContent>
       </Card>
+
+      <Card>
+        <CardContent>
+          <Typography variant="h6" gutterBottom>
+            Clear Database
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Remove all locally stored data including playlists, videos, and
+            operation history. This does not delete anything on YouTube.
+          </Typography>
+          <Button
+            variant="contained"
+            color="error"
+            onClick={() => setResetDialogOpen(true)}
+            disabled={resetDatabase.isPending}
+          >
+            {resetDatabase.isPending ? 'Clearing...' : 'Clear Database'}
+          </Button>
+          {resetDatabase.isSuccess && (
+            <Alert severity="success" sx={{ mt: 2 }}>
+              Database cleared successfully.
+            </Alert>
+          )}
+          {resetDatabase.isError && (
+            <Alert severity="error" sx={{ mt: 2 }}>
+              {resetDatabase.error.message}
+            </Alert>
+          )}
+        </CardContent>
+      </Card>
+
+      <ConfirmDialog
+        open={resetDialogOpen}
+        title="Clear All Local Data"
+        description="This will clear all local data including playlists, videos, liked status, and operation history. Nothing will be deleted on YouTube. You can re-sync your data afterwards."
+        onConfirm={() => {
+          setResetDialogOpen(false)
+          resetDatabase.mutate()
+        }}
+        onCancel={() => setResetDialogOpen(false)}
+      />
     </Box>
   )
 }

@@ -44,6 +44,7 @@ def create_app(db_path: str | None = None) -> FastAPI:
     from youtube_helper.web.routes.queue import router as queue_router
     from youtube_helper.web.routes.search import router as search_router
     from youtube_helper.web.routes.sync import router as sync_router
+    from youtube_helper.web.routes.system import router as system_router
     from youtube_helper.web.routes.videos import router as videos_router
     from youtube_helper.web.routes.watch_later import router as watch_later_router
 
@@ -54,6 +55,7 @@ def create_app(db_path: str | None = None) -> FastAPI:
     app.include_router(queue_router)
     app.include_router(search_router)
     app.include_router(sync_router)
+    app.include_router(system_router)
     app.include_router(videos_router)
     app.include_router(watch_later_router)
 

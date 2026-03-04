@@ -112,3 +112,13 @@ export function useLikeAll() {
     },
   })
 }
+
+export function useResetDatabase() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => api.resetDatabase(),
+    onSuccess: () => {
+      qc.invalidateQueries()
+    },
+  })
+}

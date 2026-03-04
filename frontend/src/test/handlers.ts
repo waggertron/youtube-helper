@@ -15,6 +15,7 @@ export const handlers = [
     return HttpResponse.json({ query: url.searchParams.get('q'), results: [] })
   }),
   http.post('/api/sync', () => HttpResponse.json({ operation_id: 1, message: 'Sync queued' })),
+  http.post('/api/reset', () => HttpResponse.json({ message: 'Database cleared' })),
   http.post('/api/auth/upload-secret', () => HttpResponse.json({ message: 'Client secret saved' })),
   http.get('/api/auth/start', () =>
     HttpResponse.json({ auth_url: 'https://accounts.google.com/o/oauth2/auth?fake=1' })

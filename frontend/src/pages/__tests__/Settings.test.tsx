@@ -153,4 +153,78 @@ describe('Settings', () => {
       expect(screen.getByText(/successfully authenticated/i)).toBeInTheDocument()
     })
   })
+
+  it('renders Clear Database section', async () => {
+    renderWithProviders(<Settings />)
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Clear Database' })).toBeInTheDocument()
+    })
+    expect(
+      screen.getByRole('button', { name: /clear database/i }),
+    ).toBeInTheDocument()
+  })
+
+  it('shows confirm dialog when Clear Database button is clicked', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<Settings />)
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /clear database/i })).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('button', { name: /clear database/i }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+      expect(screen.getByText(/nothing will be deleted on youtube/i)).toBeInTheDocument()
+    })
+  })
+
+  it('calls reset API when confirm is clicked in clear database dialog', async () => {
+    let resetCalled = false
+    server.use(
+      http.post('/api/reset', () => {
+        resetCalled = true
+        return HttpResponse.json({ message: 'Database cleared' })
+      }),
+    )
+
+    const user = userEvent.setup()
+    renderWithProviders(<Settings />)
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /clear database/i })).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('button', { name: /clear database/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText('Confirm')).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByText('Confirm'))
+
+    await waitFor(() => expect(resetCalled).toBe(true))
+  })
+
+  it('closes dialog when cancel is clicked in clear database dialog', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<Settings />)
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /clear database/i })).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('button', { name: /clear database/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText('Confirm')).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByText('Cancel'))
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
+  })
 })

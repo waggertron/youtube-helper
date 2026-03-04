@@ -104,6 +104,9 @@ export const api = {
       `/search?q=${encodeURIComponent(q)}${threshold ? `&threshold=${threshold}` : ''}`,
     ),
 
+  // System
+  resetDatabase: () => request<{ message: string }>('/reset', { method: 'POST' }),
+
   // Sync
   sync: () => request<QueuedOp>('/sync', { method: 'POST' }),
 
