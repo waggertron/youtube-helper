@@ -8,6 +8,7 @@ export const handlers = [
   http.get('/api/auth/status', () =>
     HttpResponse.json({ authenticated: false, has_client_secret: false, has_token: false })
   ),
+  http.get('/api/videos', () => HttpResponse.json({ videos: [] })),
   http.get('/api/queue', () => HttpResponse.json({ operations: [] })),
   http.get('/api/search', ({ request }) => {
     const url = new URL(request.url)

@@ -7,6 +7,7 @@ import {
   PlaylistPlay,
   WatchLater,
   Search as SearchIcon,
+  VideoLibrary,
   ThumbUp,
   Settings,
   Menu as MenuIcon,
@@ -14,7 +15,9 @@ import {
 } from '@mui/icons-material'
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useQueue } from '../hooks/useApi'
+import { useSSE } from '../hooks/useSSE'
 import QueuePanel from './QueuePanel'
 
 const DRAWER_WIDTH = 240
@@ -24,6 +27,7 @@ const NAV_ITEMS = [
   { label: 'Playlists', icon: <PlaylistPlay />, path: '/playlists' },
   { label: 'Watch Later', icon: <WatchLater />, path: '/watch-later' },
   { label: 'Search', icon: <SearchIcon />, path: '/search' },
+  { label: 'All Videos', icon: <VideoLibrary />, path: '/videos' },
   { label: 'Liked Videos', icon: <ThumbUp />, path: '/liked' },
   { label: 'Settings', icon: <Settings />, path: '/settings' },
 ]
@@ -33,11 +37,25 @@ export default function Layout() {
   const location = useLocation()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [queueOpen, setQueueOpen] = useState(false)
+  const qc = useQueryClient()
   const { data } = useQueue()
   const operations = data?.operations ?? []
   const activeCount = operations.filter(
     (op) => op.status === 'active' || op.status === 'pending',
   ).length
+
+  // Wire SSE events to instantly refresh queue data
+  useSSE((event) => {
+    if (event.type === 'queue') {
+      qc.invalidateQueries({ queryKey: ['queue'] })
+      // Also refresh data that operations may have changed
+      if (event.status === 'completed') {
+        qc.invalidateQueries({ queryKey: ['playlists'] })
+        qc.invalidateQueries({ queryKey: ['watch-later'] })
+        qc.invalidateQueries({ queryKey: ['liked-videos'] })
+      }
+    }
+  })
 
   const drawer = (
     <Box>

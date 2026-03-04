@@ -10,6 +10,7 @@ import PlaylistDetail from './pages/PlaylistDetail'
 import WatchLater from './pages/WatchLater'
 import Search from './pages/Search'
 import LikedVideos from './pages/LikedVideos'
+import AllVideos from './pages/AllVideos'
 import Settings from './pages/Settings'
 
 const queryClient = new QueryClient()
@@ -28,6 +29,7 @@ export default function App() {
                 <Route path="/playlists/:id" element={<PlaylistDetail />} />
                 <Route path="/watch-later" element={<WatchLater />} />
                 <Route path="/search" element={<Search />} />
+                <Route path="/videos" element={<AllVideos />} />
                 <Route path="/liked" element={<LikedVideos />} />
                 <Route path="/settings" element={<Settings />} />
               </Route>
