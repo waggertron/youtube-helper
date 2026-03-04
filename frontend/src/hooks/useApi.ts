@@ -85,3 +85,17 @@ export const usePruneExports = () => {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['queue'] }),
   })
 }
+
+export function useUploadSecret() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (file: File) => api.uploadSecret(file),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['auth-status'] }),
+  })
+}
+
+export function useStartAuth() {
+  return useMutation({
+    mutationFn: () => api.startAuth(),
+  })
+}

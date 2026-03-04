@@ -24,6 +24,16 @@ export const api = {
       has_client_secret: boolean
       has_token: boolean
     }>('/auth/status'),
+  uploadSecret: (file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return fetch(`${BASE}/auth/upload-secret`, { method: 'POST', body: form })
+      .then(r => {
+        if (!r.ok) return r.json().then(e => { throw new Error(e.detail || 'Upload failed') })
+        return r.json()
+      })
+  },
+  startAuth: () => request<{ auth_url: string }>('/auth/start'),
 
   // Playlists
   listPlaylists: () => request<{ playlists: Playlist[] }>('/playlists'),
