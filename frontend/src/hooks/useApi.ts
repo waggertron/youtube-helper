@@ -45,6 +45,9 @@ export const useQueue = () =>
     refetchInterval: 2000,
   })
 
+export const useAllVideos = () =>
+  useQuery({ queryKey: ['all-videos'], queryFn: api.listAllVideos })
+
 // Mutations
 export const useSync = () => {
   const qc = useQueryClient()
@@ -97,5 +100,15 @@ export function useUploadSecret() {
 export function useStartAuth() {
   return useMutation({
     mutationFn: () => api.startAuth(),
+  })
+}
+
+export function useLikeAll() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (playlistId: string) => api.likeAllPlaylist(playlistId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['queue'] })
+    },
   })
 }

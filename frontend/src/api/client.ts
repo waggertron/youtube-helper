@@ -62,6 +62,8 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify({ video_ids: videoIds }),
     }),
+  likeAllPlaylist: (playlistId: string) =>
+    request<QueuedOp>(`/playlists/${playlistId}/like-all`, { method: 'POST' }),
 
   // Videos
   likedVideos: () => request<{ videos: Video[] }>('/videos/liked'),
@@ -69,6 +71,7 @@ export const api = {
     request<QueuedOp>(`/videos/${id}/like`, { method: 'POST' }),
   unlikeVideo: (id: string) =>
     request<QueuedOp>(`/videos/${id}/like`, { method: 'DELETE' }),
+  listAllVideos: () => request<{ videos: VideoWithPlaylists[] }>('/videos'),
 
   // Watch Later
   watchLater: () => request<{ videos: Video[] }>('/watch-later'),
@@ -135,6 +138,12 @@ export interface Video {
   thumbnail_url: string
   published_at: string
   position?: number
+  is_liked?: number | null
+}
+
+export interface VideoWithPlaylists extends Video {
+  playlist_names: string | null
+  playlist_ids: string | null
 }
 
 export interface SearchResult extends Partial<Video>, Partial<Playlist> {
