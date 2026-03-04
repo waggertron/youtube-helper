@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import re
+import shutil
+import tempfile
+from pathlib import Path
 
 
 def parse_duration_text(text: str) -> int:
@@ -46,8 +49,6 @@ def parse_video_entry(entry: dict) -> dict:
 
 def find_chrome_profile_path() -> str:
     """Find the default Chrome user data directory on macOS."""
-    from pathlib import Path
-
     mac_path = (
         Path.home()
         / "Library"
@@ -60,6 +61,45 @@ def find_chrome_profile_path() -> str:
     raise FileNotFoundError(
         "Chrome profile not found. Expected at: " + str(mac_path)
     )
+
+
+def _copy_chrome_profile(chrome_path: str) -> str:
+    """Copy essential Chrome profile files to a temp dir.
+
+    This allows Playwright to use the profile while Chrome is running,
+    avoiding the ProcessSingleton lock conflict.
+    """
+    src = Path(chrome_path)
+    tmp = Path(tempfile.mkdtemp(prefix="yt-helper-chrome-"))
+
+    # Copy Local State (top-level, needed for cookie decryption)
+    local_state = src / "Local State"
+    if local_state.exists():
+        shutil.copy2(str(local_state), str(tmp / "Local State"))
+
+    # Copy the Default profile's essential files
+    default_src = src / "Default"
+    default_dst = tmp / "Default"
+    default_dst.mkdir()
+
+    for name in (
+        "Cookies",
+        "Cookies-journal",
+        "Network",
+        "Preferences",
+        "Secure Preferences",
+        "Login Data",
+        "Login Data-journal",
+        "Web Data",
+        "Web Data-journal",
+    ):
+        item = default_src / name
+        if item.is_dir():
+            shutil.copytree(str(item), str(default_dst / name))
+        elif item.exists():
+            shutil.copy2(str(item), str(default_dst / name))
+
+    return str(tmp)
 
 
 async def scrape_watch_later(
@@ -84,14 +124,28 @@ async def scrape_watch_later(
     console = Console()
     chrome_path = find_chrome_profile_path()
     videos: list[dict] = []
+    temp_profile: str | None = None
 
     async with async_playwright() as p:
-        context = await p.chromium.launch_persistent_context(
-            user_data_dir=chrome_path,
-            channel="chrome",
-            headless=headless,
-            args=["--disable-blink-features=AutomationControlled"],
-        )
+        try:
+            context = await p.chromium.launch_persistent_context(
+                user_data_dir=chrome_path,
+                channel="chrome",
+                headless=headless,
+                args=["--disable-blink-features=AutomationControlled"],
+            )
+        except Exception:
+            # Chrome is likely running — copy profile to temp dir
+            console.print(
+                "[yellow]Chrome is running, using profile copy...[/yellow]"
+            )
+            temp_profile = _copy_chrome_profile(chrome_path)
+            context = await p.chromium.launch_persistent_context(
+                user_data_dir=temp_profile,
+                channel="chrome",
+                headless=headless,
+                args=["--disable-blink-features=AutomationControlled"],
+            )
         page = (
             context.pages[0]
             if context.pages
@@ -253,5 +307,8 @@ async def scrape_watch_later(
                 continue
 
         await context.close()
+
+    if temp_profile:
+        shutil.rmtree(temp_profile, ignore_errors=True)
 
     return videos

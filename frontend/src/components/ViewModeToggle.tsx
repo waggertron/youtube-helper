@@ -1,4 +1,4 @@
-import { ToggleButton, ToggleButtonGroup, Tooltip } from '@mui/material'
+import { ToggleButton, ToggleButtonGroup } from '@mui/material'
 import { ViewModule, ViewList, TableRows } from '@mui/icons-material'
 
 export type ViewMode = 'grid' | 'list' | 'compact'
@@ -17,19 +17,13 @@ export default function ViewModeToggle({ value, onChange }: ViewModeToggleProps)
       size="small"
     >
       <ToggleButton value="grid" aria-label="Grid view">
-        <Tooltip title="Grid with thumbnails">
-          <ViewModule />
-        </Tooltip>
+        <ViewModule />
       </ToggleButton>
       <ToggleButton value="list" aria-label="List view">
-        <Tooltip title="List with thumbnails">
-          <ViewList />
-        </Tooltip>
+        <ViewList />
       </ToggleButton>
       <ToggleButton value="compact" aria-label="Compact view">
-        <Tooltip title="Compact list">
-          <TableRows />
-        </Tooltip>
+        <TableRows />
       </ToggleButton>
     </ToggleButtonGroup>
   )
