@@ -120,8 +120,110 @@ class TestRemoveVideosFromDb:
         removed = manager.remove_videos_from_db("WL", ["VID1", "VID2"])
         assert removed == 2
         conn = get_connection(seeded_db)
-        remaining = conn.execute(
+        # After soft delete, rows still exist but with removed_at set
+        active = conn.execute(
+            "SELECT * FROM playlist_videos "
+            "WHERE playlist_id = 'WL' AND removed_at IS NULL"
+        ).fetchall()
+        assert len(active) == 3
+        conn.close()
+
+
+class TestSoftDelete:
+    def test_remove_videos_soft_deletes(self, manager, seeded_db):
+        """After remove, row still exists with removed_at IS NOT NULL."""
+        manager.remove_videos_from_db("WL", ["VID1"])
+        conn = get_connection(seeded_db)
+        # Row should still exist
+        row = conn.execute(
+            "SELECT * FROM playlist_videos "
+            "WHERE playlist_id = 'WL' AND video_id = 'VID1'"
+        ).fetchone()
+        assert row is not None
+        assert row["removed_at"] is not None
+        # Total rows unchanged (5 total, 1 soft-deleted)
+        all_rows = conn.execute(
             "SELECT * FROM playlist_videos WHERE playlist_id = 'WL'"
         ).fetchall()
-        assert len(remaining) == 3
+        assert len(all_rows) == 5
+        conn.close()
+
+    def test_removed_videos_excluded_from_watched(self, manager, seeded_db):
+        """get_watched_videos() excludes soft-deleted rows."""
+        # VID1 has 90% progress, should be in watched list initially
+        watched_before = manager.get_watched_videos(threshold=50.0)
+        ids_before = [v["id"] for v in watched_before]
+        assert "VID1" in ids_before
+
+        # Soft delete VID1
+        manager.remove_videos_from_db("WL", ["VID1"])
+
+        # VID1 should no longer appear in watched videos
+        watched_after = manager.get_watched_videos(threshold=50.0)
+        ids_after = [v["id"] for v in watched_after]
+        assert "VID1" not in ids_after
+
+    def test_removed_videos_excluded_from_unwatched(self, manager, seeded_db):
+        """get_unwatched_videos() excludes soft-deleted rows."""
+        # VID3 has 10% progress, should be in unwatched list initially
+        unwatched_before = manager.get_unwatched_videos(threshold=50.0)
+        ids_before = [v["id"] for v in unwatched_before]
+        assert "VID3" in ids_before
+
+        # Soft delete VID3
+        manager.remove_videos_from_db("WL", ["VID3"])
+
+        # VID3 should no longer appear in unwatched videos
+        unwatched_after = manager.get_unwatched_videos(threshold=50.0)
+        ids_after = [v["id"] for v in unwatched_after]
+        assert "VID3" not in ids_after
+
+    def test_removed_videos_excluded_from_export(self, manager, seeded_db):
+        """export_playlist_data() excludes soft-deleted rows."""
+        data_before = manager.export_playlist_data("WL")
+        assert len(data_before) == 5
+
+        # Soft delete VID1 and VID2
+        manager.remove_videos_from_db("WL", ["VID1", "VID2"])
+
+        data_after = manager.export_playlist_data("WL")
+        assert len(data_after) == 3
+        ids_after = [v["id"] for v in data_after]
+        assert "VID1" not in ids_after
+        assert "VID2" not in ids_after
+
+    def test_rescrape_clears_removed_at(self, manager, seeded_db):
+        """save_scraped_videos() clears removed_at when re-adding."""
+        # Soft delete VID1
+        manager.remove_videos_from_db("WL", ["VID1"])
+
+        # Verify it's soft-deleted
+        conn = get_connection(seeded_db)
+        row = conn.execute(
+            "SELECT removed_at FROM playlist_videos "
+            "WHERE playlist_id = 'WL' AND video_id = 'VID1'"
+        ).fetchone()
+        assert row["removed_at"] is not None
+        conn.close()
+
+        # Re-scrape the same video
+        scraped = [
+            {
+                "video_id": "VID1",
+                "title": "Watched Fully",
+                "channel": "Channel A",
+                "duration_seconds": 300,
+                "progress_percent": 90.0,
+                "thumbnail_url": "",
+            }
+        ]
+        manager.save_scraped_videos(scraped)
+
+        # removed_at should be cleared (NULL)
+        conn = get_connection(seeded_db)
+        row = conn.execute(
+            "SELECT removed_at FROM playlist_videos "
+            "WHERE playlist_id = 'WL' AND video_id = 'VID1'"
+        ).fetchone()
+        assert row["removed_at"] is None
         conn.close()

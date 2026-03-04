@@ -49,7 +49,8 @@ class WatchLaterManager:
                     playlist_item_id, position)
                    VALUES (?, ?, ?, ?)
                    ON CONFLICT(playlist_id, video_id)
-                   DO UPDATE SET position=excluded.position""",
+                   DO UPDATE SET position=excluded.position,
+                   removed_at=NULL""",
                 (self.WATCH_LATER_ID, v["video_id"], "", i),
             )
             saved += 1
@@ -67,6 +68,7 @@ class WatchLaterManager:
                JOIN playlist_videos pv ON v.id = pv.video_id
                WHERE pv.playlist_id = ?
                AND v.watch_progress >= ?
+               AND pv.removed_at IS NULL
                ORDER BY v.watch_progress DESC""",
             (self.WATCH_LATER_ID, threshold),
         ).fetchall()
@@ -83,6 +85,7 @@ class WatchLaterManager:
                JOIN playlist_videos pv ON v.id = pv.video_id
                WHERE pv.playlist_id = ?
                AND v.watch_progress < ?
+               AND pv.removed_at IS NULL
                ORDER BY pv.position""",
             (self.WATCH_LATER_ID, threshold),
         ).fetchall()
@@ -99,6 +102,7 @@ class WatchLaterManager:
                FROM videos v
                JOIN playlist_videos pv ON v.id = pv.video_id
                WHERE pv.playlist_id = ?
+               AND pv.removed_at IS NULL
                ORDER BY pv.position""",
             (playlist_id,),
         ).fetchall()
@@ -113,8 +117,8 @@ class WatchLaterManager:
         removed = 0
         for vid in video_ids:
             conn.execute(
-                "DELETE FROM playlist_videos "
-                "WHERE playlist_id = ? AND video_id = ?",
+                "UPDATE playlist_videos SET removed_at = datetime('now') "
+                "WHERE playlist_id = ? AND video_id = ? AND removed_at IS NULL",
                 (playlist_id, vid),
             )
             removed += 1
