@@ -13,6 +13,11 @@ htmlcov/
 .ruff_cache/
 .DS_Store
 *.db
+*.db-journal
+*.db-wal
 token.pickle
 credentials.json
 client_secret*.json
+
+# Chrome profile copies (created by scraper)
+yt-helper-chrome-*/
