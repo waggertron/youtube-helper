@@ -25,6 +25,7 @@ def register_all_handlers(processor: QueueProcessor) -> None:
     processor.register_handler("reorder_playlist", handle_reorder)
     processor.register_handler("like_video", handle_like)
     processor.register_handler("unlike_video", handle_unlike)
+    processor.register_handler("like_all", handle_like_all)
 
 
 def _get_youtube_client(db_path: str):
@@ -50,9 +51,12 @@ async def handle_sync(params, progress):
     await progress(20.0, "Syncing playlists...")
     engine = SyncEngine(db_path, client)
     stats = engine.sync_all()
+    await progress(85.0, "Syncing liked videos...")
+    liked_count = engine.sync_liked_videos()
     await progress(
         100.0,
-        f"Synced {stats['playlists']} playlists, {stats['videos']} videos",
+        f"Synced {stats['playlists']} playlists, {stats['videos']} videos, "
+        f"{liked_count} liked videos",
     )
 
 
@@ -457,3 +461,26 @@ async def handle_unlike(params, progress):
     conn.commit()
     conn.close()
     await progress(100.0, "Like removed")
+
+
+async def handle_like_all(params, progress):
+    """Like all videos in a playlist."""
+    from youtube_helper.config.settings import Settings
+    from youtube_helper.db.connection import get_connection
+
+    settings = Settings()
+    youtube, _ = _get_youtube_client(str(settings.db_path))
+    video_ids = params["video_ids"]
+    for i, vid in enumerate(video_ids):
+        youtube.videos().rate(id=vid, rating="like").execute()
+        conn = get_connection(str(settings.db_path))
+        conn.execute(
+            "INSERT INTO liked_videos (video_id, liked_at) "
+            "VALUES (?, datetime('now')) "
+            "ON CONFLICT(video_id) DO UPDATE SET liked_at=datetime('now'), removed_at=NULL",
+            (vid,),
+        )
+        conn.commit()
+        conn.close()
+        pct = (i + 1) / len(video_ids) * 100
+        await progress(pct, f"Liked {i + 1}/{len(video_ids)}")

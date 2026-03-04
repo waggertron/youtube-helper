@@ -25,6 +25,26 @@ def mock_playlist_client():
             "contentDetails": {"itemCount": 2},
         }
     ]
+    client.get_video_details.return_value = {
+        "VID1": {
+            "id": "VID1",
+            "contentDetails": {"duration": "PT3M45S"},
+            "snippet": {
+                "thumbnails": {
+                    "medium": {"url": "https://i.ytimg.com/vi/VID1/mqdefault.jpg"}
+                }
+            },
+        },
+        "VID2": {
+            "id": "VID2",
+            "contentDetails": {"duration": "PT10M0S"},
+            "snippet": {
+                "thumbnails": {
+                    "medium": {"url": "https://i.ytimg.com/vi/VID2/mqdefault.jpg"}
+                }
+            },
+        },
+    }
     client.list_playlist_items.return_value = [
         {
             "id": "PLI1",
@@ -107,3 +127,180 @@ class TestSyncPlaylists:
         assert stats["playlists"] == 1
         assert stats["videos"] == 2
         assert stats["relationships"] == 2
+
+
+def _make_liked_api_response(items, next_page_token=None):
+    """Build a mock YouTube videos().list(myRating='like') response."""
+    resp = {"items": items}
+    if next_page_token:
+        resp["nextPageToken"] = next_page_token
+    return resp
+
+
+def _make_liked_item(video_id, title="Test Video", channel_id="CH1",
+                     channel_title="Test Channel", duration="PT5M30S",
+                     published_at="2024-06-15T12:00:00Z",
+                     thumb_url="https://i.ytimg.com/vi/X/mqdefault.jpg"):
+    """Build a single item as returned by videos().list(myRating='like')."""
+    return {
+        "id": video_id,
+        "snippet": {
+            "title": title,
+            "channelId": channel_id,
+            "channelTitle": channel_title,
+            "publishedAt": published_at,
+            "thumbnails": {
+                "medium": {"url": thumb_url},
+            },
+        },
+        "contentDetails": {
+            "duration": duration,
+        },
+    }
+
+
+class TestSyncLikedVideos:
+    def test_upserts_videos_into_videos_table(self, db_path):
+        """sync_liked_videos should insert/update rows in the videos table."""
+        client = MagicMock()
+        items = [
+            _make_liked_item("LV1", title="Liked One", channel_id="CH_A",
+                             channel_title="Channel A", duration="PT3M45S"),
+            _make_liked_item("LV2", title="Liked Two", channel_id="CH_B",
+                             channel_title="Channel B", duration="PT10M0S"),
+        ]
+        client.youtube.videos.return_value.list.return_value.execute.return_value = (
+            _make_liked_api_response(items)
+        )
+        engine = SyncEngine(db_path, client)
+        engine.sync_liked_videos()
+
+        conn = get_connection(db_path)
+        videos = conn.execute(
+            "SELECT * FROM videos ORDER BY id"
+        ).fetchall()
+        conn.close()
+
+        assert len(videos) == 2
+        v1 = next(v for v in videos if v["id"] == "LV1")
+        assert v1["title"] == "Liked One"
+        assert v1["channel_id"] == "CH_A"
+        assert v1["channel_name"] == "Channel A"
+        assert v1["duration"] == 225  # 3*60 + 45
+        v2 = next(v for v in videos if v["id"] == "LV2")
+        assert v2["title"] == "Liked Two"
+        assert v2["duration"] == 600  # 10*60
+
+    def test_creates_liked_videos_entries(self, db_path):
+        """sync_liked_videos should insert rows into the liked_videos table."""
+        client = MagicMock()
+        items = [
+            _make_liked_item("LV1"),
+            _make_liked_item("LV2"),
+        ]
+        client.youtube.videos.return_value.list.return_value.execute.return_value = (
+            _make_liked_api_response(items)
+        )
+        engine = SyncEngine(db_path, client)
+        engine.sync_liked_videos()
+
+        conn = get_connection(db_path)
+        liked = conn.execute(
+            "SELECT * FROM liked_videos ORDER BY video_id"
+        ).fetchall()
+        conn.close()
+
+        assert len(liked) == 2
+        assert liked[0]["video_id"] == "LV1"
+        assert liked[0]["liked_at"] is not None
+        assert liked[0]["removed_at"] is None
+        assert liked[1]["video_id"] == "LV2"
+
+    def test_returns_correct_count(self, db_path):
+        """sync_liked_videos should return the number of liked videos synced."""
+        client = MagicMock()
+        items = [
+            _make_liked_item("LV1"),
+            _make_liked_item("LV2"),
+            _make_liked_item("LV3"),
+        ]
+        client.youtube.videos.return_value.list.return_value.execute.return_value = (
+            _make_liked_api_response(items)
+        )
+        engine = SyncEngine(db_path, client)
+        count = engine.sync_liked_videos()
+
+        assert count == 3
+
+    def test_pagination_fetches_all_pages(self, db_path):
+        """sync_liked_videos should follow nextPageToken to fetch all pages."""
+        client = MagicMock()
+        page1_items = [_make_liked_item("LV1")]
+        page2_items = [_make_liked_item("LV2")]
+        client.youtube.videos.return_value.list.return_value.execute.side_effect = [
+            _make_liked_api_response(page1_items, next_page_token="TOKEN_2"),
+            _make_liked_api_response(page2_items),
+        ]
+        engine = SyncEngine(db_path, client)
+        count = engine.sync_liked_videos()
+
+        assert count == 2
+        conn = get_connection(db_path)
+        videos = conn.execute("SELECT * FROM videos").fetchall()
+        liked = conn.execute("SELECT * FROM liked_videos").fetchall()
+        conn.close()
+        assert len(videos) == 2
+        assert len(liked) == 2
+
+    def test_idempotent_sync(self, db_path):
+        """Running sync_liked_videos twice should not duplicate rows."""
+        client = MagicMock()
+        items = [_make_liked_item("LV1")]
+        client.youtube.videos.return_value.list.return_value.execute.return_value = (
+            _make_liked_api_response(items)
+        )
+        engine = SyncEngine(db_path, client)
+        engine.sync_liked_videos()
+        engine.sync_liked_videos()
+
+        conn = get_connection(db_path)
+        videos = conn.execute("SELECT * FROM videos").fetchall()
+        liked = conn.execute("SELECT * FROM liked_videos").fetchall()
+        conn.close()
+        assert len(videos) == 1
+        assert len(liked) == 1
+
+    def test_clears_removed_at_on_re_sync(self, db_path):
+        """If a video was previously unliked (removed_at set), re-syncing
+        should clear removed_at."""
+        # Pre-seed a soft-deleted liked video
+        conn = get_connection(db_path)
+        conn.execute(
+            "INSERT INTO videos (id, title) VALUES ('LV1', 'Old Title')"
+        )
+        conn.execute(
+            "INSERT INTO liked_videos (video_id, liked_at, removed_at) "
+            "VALUES ('LV1', '2024-01-01', '2024-06-01')"
+        )
+        conn.commit()
+        conn.close()
+
+        client = MagicMock()
+        items = [_make_liked_item("LV1", title="Updated Title")]
+        client.youtube.videos.return_value.list.return_value.execute.return_value = (
+            _make_liked_api_response(items)
+        )
+        engine = SyncEngine(db_path, client)
+        engine.sync_liked_videos()
+
+        conn = get_connection(db_path)
+        row = conn.execute(
+            "SELECT * FROM liked_videos WHERE video_id = 'LV1'"
+        ).fetchone()
+        video = conn.execute(
+            "SELECT * FROM videos WHERE id = 'LV1'"
+        ).fetchone()
+        conn.close()
+
+        assert row["removed_at"] is None
+        assert video["title"] == "Updated Title"
