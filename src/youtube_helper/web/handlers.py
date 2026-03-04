@@ -335,14 +335,20 @@ async def handle_delete_playlist(params, progress):
     youtube.playlists().delete(id=params["playlist_id"]).execute()
     conn = get_connection(str(settings.db_path))
     conn.execute(
-        "DELETE FROM playlist_videos WHERE playlist_id = ?",
+        "UPDATE playlist_videos SET removed_at = datetime('now') "
+        "WHERE playlist_id = ? AND removed_at IS NULL",
         (params["playlist_id"],),
     )
+    conn.commit()
+    # Disable FK checks outside a transaction so we can delete the
+    # playlist row while soft-deleted child rows still reference it.
+    conn.execute("PRAGMA foreign_keys = OFF")
     conn.execute(
         "DELETE FROM playlists WHERE id = ?",
         (params["playlist_id"],),
     )
     conn.commit()
+    conn.execute("PRAGMA foreign_keys = ON")
     conn.close()
     await progress(100.0, "Playlist deleted")
 
@@ -380,8 +386,8 @@ async def handle_remove_video(params, progress):
         client.remove_from_playlist(row["playlist_item_id"])
     conn = get_connection(db_path)
     conn.execute(
-        "DELETE FROM playlist_videos "
-        "WHERE playlist_id = ? AND video_id = ?",
+        "UPDATE playlist_videos SET removed_at = datetime('now') "
+        "WHERE playlist_id = ? AND video_id = ? AND removed_at IS NULL",
         (params["playlist_id"], params["video_id"]),
     )
     conn.commit()
@@ -421,8 +427,9 @@ async def handle_like(params, progress):
     ).execute()
     conn = get_connection(str(settings.db_path))
     conn.execute(
-        "INSERT OR REPLACE INTO liked_videos "
-        "(video_id, liked_at) VALUES (?, datetime('now'))",
+        "INSERT INTO liked_videos (video_id, liked_at) "
+        "VALUES (?, datetime('now')) "
+        "ON CONFLICT(video_id) DO UPDATE SET liked_at=datetime('now'), removed_at=NULL",
         (params["video_id"],),
     )
     conn.commit()
@@ -443,7 +450,8 @@ async def handle_unlike(params, progress):
     ).execute()
     conn = get_connection(str(settings.db_path))
     conn.execute(
-        "DELETE FROM liked_videos WHERE video_id = ?",
+        "UPDATE liked_videos SET removed_at = datetime('now') "
+        "WHERE video_id = ? AND removed_at IS NULL",
         (params["video_id"],),
     )
     conn.commit()
