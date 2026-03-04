@@ -38,9 +38,12 @@ async def get_playlist_videos(playlist_id: str, request: Request):
         conn.close()
         raise HTTPException(status_code=404, detail="Playlist not found")
     rows = conn.execute(
-        """SELECT v.*, pv.position FROM videos v
+        """SELECT v.*, pv.position,
+           (SELECT 1 FROM liked_videos lv
+            WHERE lv.video_id = v.id AND lv.removed_at IS NULL) as is_liked
+           FROM videos v
            JOIN playlist_videos pv ON v.id = pv.video_id
-           WHERE pv.playlist_id = ?
+           WHERE pv.playlist_id = ? AND pv.removed_at IS NULL
            ORDER BY pv.position""",
         (playlist_id,),
     ).fetchall()

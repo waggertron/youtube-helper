@@ -114,3 +114,21 @@ class TestPlaylistRoutes:
         )
         assert resp.status_code == 202
         assert "operation_id" in resp.json()
+
+    @pytest.mark.asyncio
+    async def test_playlist_videos_include_is_liked(self, client, seeded_db):
+        # Like V1
+        conn = get_connection(seeded_db)
+        conn.execute(
+            "INSERT INTO liked_videos (video_id, liked_at) "
+            "VALUES ('V1', datetime('now'))"
+        )
+        conn.commit()
+        conn.close()
+
+        resp = await client.get("/api/playlists/PL1/videos")
+        videos = resp.json()["videos"]
+        v1 = next(v for v in videos if v["id"] == "V1")
+        v2 = next(v for v in videos if v["id"] == "V2")
+        assert v1["is_liked"] == 1
+        assert v2["is_liked"] is None
