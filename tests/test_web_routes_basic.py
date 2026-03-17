@@ -47,9 +47,9 @@ class TestSearchRoutes:
 
 class TestSyncRoutes:
     @pytest.mark.asyncio
-    async def test_sync_submits_to_queue(self, client):
+    async def test_sync_starts_background_task(self, client):
         resp = await client.post("/api/sync")
         assert resp.status_code == 202
         data = resp.json()
-        assert "operation_id" in data
-        assert data["message"] == "Sync queued"
+        assert data["status"] == "running"
+        assert data["message"] == "Sync started"

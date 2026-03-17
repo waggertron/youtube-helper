@@ -16,8 +16,7 @@ async def reset_database(request: Request):
     # Delete from parent tables
     conn.execute("DELETE FROM playlists")
     conn.execute("DELETE FROM videos")
-    # Delete queue and watch history
-    conn.execute("DELETE FROM operation_queue")
+    # Delete watch history
     conn.execute("DELETE FROM watch_history")
     conn.commit()
     conn.close()

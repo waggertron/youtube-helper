@@ -2,6 +2,7 @@
 from fastapi import APIRouter, Request
 
 from youtube_helper.db.connection import get_connection
+from youtube_helper.web.handlers import handle_like, handle_unlike
 
 router = APIRouter(prefix="/api/videos", tags=["videos"])
 
@@ -38,19 +39,13 @@ async def list_liked(request: Request):
     return {"videos": [dict(r) for r in rows]}
 
 
-@router.post("/{video_id}/like", status_code=202)
-async def like_video(video_id: str, request: Request):
-    from youtube_helper.web.queue import QueueManager
-
-    qm = QueueManager(request.app.state.db_path)
-    op_id = qm.submit("like_video", {"video_id": video_id})
-    return {"operation_id": op_id, "message": "Like queued"}
+@router.post("/{video_id}/like")
+async def like_video(video_id: str):
+    result = await handle_like(video_id=video_id)
+    return result
 
 
-@router.delete("/{video_id}/like", status_code=202)
-async def unlike_video(video_id: str, request: Request):
-    from youtube_helper.web.queue import QueueManager
-
-    qm = QueueManager(request.app.state.db_path)
-    op_id = qm.submit("unlike_video", {"video_id": video_id})
-    return {"operation_id": op_id, "message": "Unlike queued"}
+@router.delete("/{video_id}/like")
+async def unlike_video(video_id: str):
+    result = await handle_unlike(video_id=video_id)
+    return result

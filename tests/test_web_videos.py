@@ -1,4 +1,6 @@
 # tests/test_web_videos.py
+from unittest.mock import AsyncMock, patch
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 
@@ -125,13 +127,17 @@ class TestVideoRoutes:
         assert len(resp.json()["videos"]) == 1
 
     @pytest.mark.asyncio
-    async def test_like_video_queues(self, client):
-        resp = await client.post("/api/videos/V1/like")
-        assert resp.status_code == 202
-        assert "operation_id" in resp.json()
+    async def test_like_video(self, client):
+        with patch("youtube_helper.web.routes.videos.handle_like", new_callable=AsyncMock) as mock:
+            mock.return_value = {"video_id": "V1", "status": "liked"}
+            resp = await client.post("/api/videos/V1/like")
+            assert resp.status_code == 200
+            assert resp.json()["status"] == "liked"
 
     @pytest.mark.asyncio
-    async def test_unlike_video_queues(self, client):
-        resp = await client.delete("/api/videos/V1/like")
-        assert resp.status_code == 202
-        assert "operation_id" in resp.json()
+    async def test_unlike_video(self, client):
+        with patch("youtube_helper.web.routes.videos.handle_unlike", new_callable=AsyncMock) as mock:
+            mock.return_value = {"video_id": "V1", "status": "unliked"}
+            resp = await client.delete("/api/videos/V1/like")
+            assert resp.status_code == 200
+            assert resp.json()["status"] == "unliked"

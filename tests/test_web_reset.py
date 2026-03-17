@@ -42,10 +42,6 @@ def seeded_db(db_path):
         "INSERT INTO liked_videos (video_id, liked_at) "
         "VALUES ('V1', datetime('now'))"
     )
-    conn.execute(
-        "INSERT INTO operation_queue (type, params, status) "
-        "VALUES ('sync', '{}', 'completed')"
-    )
     conn.commit()
     conn.close()
     return db_path
@@ -73,7 +69,6 @@ class TestResetEndpoint:
         assert conn.execute("SELECT COUNT(*) FROM videos").fetchone()[0] == 2
         assert conn.execute("SELECT COUNT(*) FROM playlist_videos").fetchone()[0] == 2
         assert conn.execute("SELECT COUNT(*) FROM liked_videos").fetchone()[0] == 1
-        assert conn.execute("SELECT COUNT(*) FROM operation_queue").fetchone()[0] == 1
         conn.close()
 
         # Call reset endpoint
@@ -88,7 +83,6 @@ class TestResetEndpoint:
         assert conn.execute("SELECT COUNT(*) FROM videos").fetchone()[0] == 0
         assert conn.execute("SELECT COUNT(*) FROM playlist_videos").fetchone()[0] == 0
         assert conn.execute("SELECT COUNT(*) FROM liked_videos").fetchone()[0] == 0
-        assert conn.execute("SELECT COUNT(*) FROM operation_queue").fetchone()[0] == 0
         conn.close()
 
     @pytest.mark.asyncio
