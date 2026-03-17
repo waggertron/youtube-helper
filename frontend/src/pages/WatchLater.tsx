@@ -16,7 +16,9 @@ import {
   useImportWatchLater,
   useExportWL,
   usePurgeWL,
+  usePurgeStatusWithToast,
 } from '../hooks/useApi'
+import OperationStatus from '../components/OperationStatus'
 
 export default function WatchLater() {
   const [threshold, setThreshold] = useState(80)
@@ -29,6 +31,7 @@ export default function WatchLater() {
   const importWL = useImportWatchLater()
   const exportWL = useExportWL()
   const purgeWL = usePurgeWL()
+  const { data: purgeStatus } = usePurgeStatusWithToast()
 
   const videos = data?.videos ?? []
 
@@ -79,12 +82,14 @@ export default function WatchLater() {
             variant="contained"
             color="warning"
             onClick={() => setConfirmPurge(true)}
-            disabled={purgeWL.isPending}
+            disabled={purgeWL.isPending || purgeStatus?.status === 'running'}
           >
-            Purge
+            {purgeStatus?.status === 'running' ? 'Purging...' : 'Purge'}
           </Button>
         </Tooltip>
       </Box>
+
+      <OperationStatus status={purgeStatus} label="Purge" />
 
       <Box sx={{ mb: 3, maxWidth: 400 }}>
         <Typography gutterBottom>

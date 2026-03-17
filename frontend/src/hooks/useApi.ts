@@ -1,5 +1,7 @@
+import { useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api/client'
+import { useToast } from '../components/ToastProvider'
 
 export const usePlaylists = () =>
   useQuery({ queryKey: ['playlists'], queryFn: api.listPlaylists, staleTime: 10_000 })
@@ -48,31 +50,43 @@ export const useAllVideos = () =>
 // Mutations
 export const useSync = () => {
   const qc = useQueryClient()
+  const toast = useToast()
   return useMutation({
     mutationFn: api.sync,
+    onMutate: () => toast.info('Sync started...'),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['sync-status'] })
       qc.invalidateQueries({ queryKey: ['playlists'] })
     },
+    onError: (err: Error) => toast.error(`Sync failed: ${err.message}`),
   })
 }
 
 export const useExportWL = () => {
   const qc = useQueryClient()
+  const toast = useToast()
   return useMutation({
     mutationFn: api.exportWatchLater,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['watch-later'] }),
+    onMutate: () => toast.info('Exporting Watch Later videos...'),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ['watch-later'] })
+      toast.success(`Export complete: ${data.exported} videos exported`)
+    },
+    onError: (err: Error) => toast.error(`Export failed: ${err.message}`),
   })
 }
 
 export const usePurgeWL = () => {
   const qc = useQueryClient()
+  const toast = useToast()
   return useMutation({
     mutationFn: api.purgeWatchLater,
+    onMutate: () => toast.info('Purge started — Chrome will open shortly...'),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['purge-status'] })
       qc.invalidateQueries({ queryKey: ['watch-later'] })
     },
+    onError: (err: Error) => toast.error(`Purge failed: ${err.message}`),
   })
 }
 
@@ -92,22 +106,29 @@ export function useStartAuth() {
 
 export function useLikeAll() {
   const qc = useQueryClient()
+  const toast = useToast()
   return useMutation({
     mutationFn: (playlistId: string) => api.likeAllPlaylist(playlistId),
+    onMutate: () => toast.info('Liking all videos...'),
     onSuccess: (_data, playlistId) => {
       qc.invalidateQueries({ queryKey: ['liked-videos'] })
       qc.invalidateQueries({ queryKey: ['playlist', playlistId] })
+      toast.success('All videos liked')
     },
+    onError: (err: Error) => toast.error(`Like all failed: ${err.message}`),
   })
 }
 
 export function useResetDatabase() {
   const qc = useQueryClient()
+  const toast = useToast()
   return useMutation({
     mutationFn: () => api.resetDatabase(),
     onSuccess: () => {
       qc.invalidateQueries()
+      toast.success('Database reset')
     },
+    onError: (err: Error) => toast.error(`Reset failed: ${err.message}`),
   })
 }
 
@@ -135,8 +156,53 @@ export function usePurgeStatus() {
 
 export function useImportWatchLater() {
   const qc = useQueryClient()
+  const toast = useToast()
   return useMutation({
     mutationFn: (file: File) => api.importWatchLater(file),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['watch-later'] }),
+    onMutate: () => toast.info('Importing Watch Later videos...'),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ['watch-later'] })
+      toast.success(`Imported ${data.imported} videos`)
+    },
+    onError: (err: Error) => toast.error(`Import failed: ${err.message}`),
   })
+}
+
+// Status hooks with toast notifications for background task transitions
+export function useSyncStatusWithToast() {
+  const query = useSyncStatus()
+  const toast = useToast()
+  const prevStatus = useRef<string | undefined>()
+
+  useEffect(() => {
+    const current = query.data?.status
+    const prev = prevStatus.current
+    if (prev === 'running' && current === 'completed') {
+      toast.success(`Sync complete: ${query.data?.message || ''}`)
+    } else if (prev === 'running' && current === 'failed') {
+      toast.error(`Sync failed: ${query.data?.error || 'Unknown error'}`)
+    }
+    prevStatus.current = current
+  }, [query.data?.status, query.data?.message, query.data?.error, toast])
+
+  return query
+}
+
+export function usePurgeStatusWithToast() {
+  const query = usePurgeStatus()
+  const toast = useToast()
+  const prevStatus = useRef<string | undefined>()
+
+  useEffect(() => {
+    const current = query.data?.status
+    const prev = prevStatus.current
+    if (prev === 'running' && current === 'completed') {
+      toast.success(`Purge complete: ${query.data?.message || ''}`)
+    } else if (prev === 'running' && current === 'failed') {
+      toast.error(`Purge failed: ${query.data?.error || 'Unknown error'}`)
+    }
+    prevStatus.current = current
+  }, [query.data?.status, query.data?.message, query.data?.error, toast])
+
+  return query
 }

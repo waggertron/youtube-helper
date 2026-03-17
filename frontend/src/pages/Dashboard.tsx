@@ -1,13 +1,15 @@
 import {
-  Box, Card, CardContent, Typography, Grid, Button, Tooltip, Stack,
+  Box, Card, CardContent, Typography, Grid, Button, Tooltip, Stack, CircularProgress,
 } from '@mui/material'
 import { Sync, WatchLater, PlaylistPlay, VideoLibrary } from '@mui/icons-material'
-import { usePlaylists, useWatchLater, useSync } from '../hooks/useApi'
+import { usePlaylists, useWatchLater, useSync, useSyncStatusWithToast } from '../hooks/useApi'
+import OperationStatus from '../components/OperationStatus'
 
 export default function Dashboard() {
   const { data: playlistData } = usePlaylists()
   const { data: wlData } = useWatchLater()
   const syncMutation = useSync()
+  const { data: syncStatus } = useSyncStatusWithToast()
 
   const playlists = playlistData?.playlists ?? []
   const wlVideos = wlData?.videos ?? []
@@ -45,15 +47,17 @@ export default function Dashboard() {
           <span>
             <Button
               variant="contained"
-              startIcon={<Sync />}
+              startIcon={syncStatus?.status === 'running' ? <CircularProgress size={20} color="inherit" /> : <Sync />}
               onClick={() => syncMutation.mutate()}
-              disabled={syncMutation.isPending}
+              disabled={syncMutation.isPending || syncStatus?.status === 'running'}
             >
-              Sync Playlists
+              {syncStatus?.status === 'running' ? 'Syncing...' : 'Sync Playlists'}
             </Button>
           </span>
         </Tooltip>
       </Stack>
+
+      <OperationStatus status={syncStatus} label="Sync" />
     </Box>
   )
 }

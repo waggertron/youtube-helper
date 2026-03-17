@@ -115,6 +115,31 @@ describe('WatchLater', () => {
     })
   })
 
+  it('shows purge progress when purge is running', async () => {
+    server.use(
+      http.get('/api/watch-later/purge/status', () =>
+        HttpResponse.json({ status: 'running', progress: 40, message: 'Removed 4/10', error: null })
+      ),
+    )
+    renderWithProviders(<WatchLater />)
+    await waitFor(() => {
+      expect(screen.getByRole('progressbar')).toBeInTheDocument()
+      expect(screen.getByText('Removed 4/10')).toBeInTheDocument()
+    })
+  })
+
+  it('shows purge completion', async () => {
+    server.use(
+      http.get('/api/watch-later/purge/status', () =>
+        HttpResponse.json({ status: 'completed', progress: 100, message: 'Removed 10 videos', error: null })
+      ),
+    )
+    renderWithProviders(<WatchLater />)
+    await waitFor(() => {
+      expect(screen.getByText(/Purge complete/)).toBeInTheDocument()
+    })
+  })
+
   it('purge button shows confirmation dialog with watched video count', async () => {
     server.use(
       http.get('/api/watch-later', () =>
