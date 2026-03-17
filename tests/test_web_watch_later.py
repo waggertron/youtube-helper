@@ -1,4 +1,7 @@
 # tests/test_web_watch_later.py
+import json
+from unittest.mock import AsyncMock, patch
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 
@@ -82,28 +85,66 @@ class TestWatchLaterRoutes:
         assert videos[0]["title"] == "Unwatched Video"
 
     @pytest.mark.asyncio
-    async def test_scrape_queues(self, client):
-        resp = await client.post("/api/watch-later/scrape")
-        assert resp.status_code == 202
-        assert "operation_id" in resp.json()
+    async def test_import_watch_later(self, client, seeded_db):
+        takeout_data = json.dumps([{
+            "contentDetails": {"videoId": "NEW_VID"},
+            "snippet": {"title": "New Video", "resourceId": {"videoId": "NEW_VID"}}
+        }])
+        resp = await client.post(
+            "/api/watch-later/import",
+            files={"file": ("watch-later.json", takeout_data.encode(), "application/json")}
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["imported"] == 1
+        # Verify DB
+        conn = get_connection(seeded_db)
+        row = conn.execute("SELECT * FROM videos WHERE id = 'NEW_VID'").fetchone()
+        assert row is not None
+        assert row["title"] == "New Video"
+        pv = conn.execute(
+            "SELECT * FROM playlist_videos WHERE playlist_id = 'WL' AND video_id = 'NEW_VID'"
+        ).fetchone()
+        assert pv is not None
+        conn.close()
 
     @pytest.mark.asyncio
-    async def test_export_queues(self, client):
+    async def test_export_watch_later(self, client):
+        with patch("youtube_helper.web.routes.watch_later.handle_export", new_callable=AsyncMock) as mock:
+            mock.return_value = {"exported": 2, "playlist_id": "PLnew"}
+            resp = await client.post(
+                "/api/watch-later/export",
+                json={"target": "My Videos", "threshold": 50}
+            )
+            assert resp.status_code == 200
+            assert resp.json()["exported"] == 2
+
+    @pytest.mark.asyncio
+    async def test_purge_returns_202(self, client):
+        with patch("youtube_helper.browser.watch_later.purge_videos_from_watch_later", new_callable=AsyncMock) as mock:
+            mock.return_value = {"removed": 1, "skipped": 0, "failed": 0}
+            resp = await client.post(
+                "/api/watch-later/purge",
+                json={"threshold": 50, "headless": True}
+            )
+            assert resp.status_code == 202
+            data = resp.json()
+            assert data["status"] == "running"
+
+    @pytest.mark.asyncio
+    async def test_purge_no_videos(self, client):
+        """Purge with threshold so high no videos qualify returns completed."""
         resp = await client.post(
-            "/api/watch-later/export",
-            json={"target": "spacepope videos", "threshold": 50},
+            "/api/watch-later/purge",
+            json={"threshold": 99, "headless": True}
         )
         assert resp.status_code == 202
-        assert "operation_id" in resp.json()
+        data = resp.json()
+        assert data["status"] == "completed"
+        assert data["removed"] == 0
 
     @pytest.mark.asyncio
-    async def test_purge_queues(self, client):
-        resp = await client.post(
-            "/api/watch-later/purge", json={"threshold": 50}
-        )
-        assert resp.status_code == 202
-
-    @pytest.mark.asyncio
-    async def test_prune_exports_queues(self, client):
-        resp = await client.post("/api/watch-later/prune-exports")
-        assert resp.status_code == 202
+    async def test_purge_status_idle(self, client):
+        resp = await client.get("/api/watch-later/purge/status")
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "idle"
