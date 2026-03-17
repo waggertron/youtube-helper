@@ -1,6 +1,7 @@
 # tests/test_web_playlists.py
 import pytest
 from httpx import ASGITransport, AsyncClient
+from unittest.mock import AsyncMock, patch
 
 from youtube_helper.db.connection import get_connection
 from youtube_helper.db.migrations import run_migrations
@@ -77,43 +78,93 @@ class TestPlaylistRoutes:
         assert resp.status_code == 404
 
     @pytest.mark.asyncio
-    async def test_create_playlist_queues(self, client):
-        resp = await client.post(
-            "/api/playlists",
-            json={"title": "New Playlist", "privacy": "private"},
+    async def test_create_playlist(self, client):
+        with patch(
+            "youtube_helper.web.routes.playlists.handle_create_playlist",
+            new_callable=AsyncMock,
+        ) as mock:
+            mock.return_value = {"id": "PLnew", "title": "New Playlist"}
+            resp = await client.post(
+                "/api/playlists",
+                json={"title": "New Playlist", "privacy": "private"},
+            )
+            assert resp.status_code == 200
+            assert resp.json()["id"] == "PLnew"
+
+    @pytest.mark.asyncio
+    async def test_delete_playlist(self, client):
+        with patch(
+            "youtube_helper.web.routes.playlists.handle_delete_playlist",
+            new_callable=AsyncMock,
+        ) as mock:
+            mock.return_value = {"deleted": "PL1"}
+            resp = await client.delete("/api/playlists/PL1")
+            assert resp.status_code == 200
+            assert resp.json()["deleted"] == "PL1"
+
+    @pytest.mark.asyncio
+    async def test_add_videos(self, client):
+        with patch(
+            "youtube_helper.web.routes.playlists.handle_add_videos",
+            new_callable=AsyncMock,
+        ) as mock:
+            mock.return_value = {"added": 1}
+            resp = await client.post(
+                "/api/playlists/PL1/videos", json={"video_ids": ["V3"]}
+            )
+            assert resp.status_code == 200
+            assert resp.json()["added"] == 1
+
+    @pytest.mark.asyncio
+    async def test_remove_video(self, client):
+        with patch(
+            "youtube_helper.web.routes.playlists.handle_remove_video",
+            new_callable=AsyncMock,
+        ) as mock:
+            mock.return_value = {"removed": "V1"}
+            resp = await client.delete("/api/playlists/PL1/videos/V1")
+            assert resp.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_reorder(self, client):
+        with patch(
+            "youtube_helper.web.routes.playlists.handle_reorder",
+            new_callable=AsyncMock,
+        ) as mock:
+            mock.return_value = {"reordered": True}
+            resp = await client.put(
+                "/api/playlists/PL1/reorder", json={"video_ids": ["V2", "V1"]}
+            )
+            assert resp.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_like_all(self, client):
+        with patch(
+            "youtube_helper.web.routes.playlists.handle_like_all",
+            new_callable=AsyncMock,
+        ) as mock:
+            mock.return_value = {"liked": 2}
+            resp = await client.post("/api/playlists/PL1/like-all")
+            assert resp.status_code == 200
+            assert resp.json()["liked"] == 2
+
+    @pytest.mark.asyncio
+    async def test_like_all_already_liked(self, client, seeded_db):
+        # Like both videos
+        conn = get_connection(seeded_db)
+        conn.execute(
+            "INSERT INTO liked_videos (video_id, liked_at) "
+            "VALUES ('V1', datetime('now'))"
         )
-        assert resp.status_code == 202
-        assert "operation_id" in resp.json()
-
-    @pytest.mark.asyncio
-    async def test_delete_playlist_queues(self, client):
-        resp = await client.delete("/api/playlists/PL1")
-        assert resp.status_code == 202
-        assert "operation_id" in resp.json()
-
-    @pytest.mark.asyncio
-    async def test_add_video_queues(self, client):
-        resp = await client.post(
-            "/api/playlists/PL1/videos",
-            json={"video_ids": ["V3"]},
+        conn.execute(
+            "INSERT INTO liked_videos (video_id, liked_at) "
+            "VALUES ('V2', datetime('now'))"
         )
-        assert resp.status_code == 202
-        assert "operation_id" in resp.json()
-
-    @pytest.mark.asyncio
-    async def test_remove_video_queues(self, client):
-        resp = await client.delete("/api/playlists/PL1/videos/V1")
-        assert resp.status_code == 202
-        assert "operation_id" in resp.json()
-
-    @pytest.mark.asyncio
-    async def test_reorder_queues(self, client):
-        resp = await client.put(
-            "/api/playlists/PL1/reorder",
-            json={"video_ids": ["V2", "V1"]},
-        )
-        assert resp.status_code == 202
-        assert "operation_id" in resp.json()
+        conn.commit()
+        conn.close()
+        resp = await client.post("/api/playlists/PL1/like-all")
+        assert resp.status_code == 200
+        assert resp.json()["message"] == "All videos already liked"
 
     @pytest.mark.asyncio
     async def test_playlist_videos_include_is_liked(self, client, seeded_db):

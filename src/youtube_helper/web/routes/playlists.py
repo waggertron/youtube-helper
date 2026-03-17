@@ -2,6 +2,14 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from youtube_helper.db.connection import get_connection
+from youtube_helper.web.handlers import (
+    handle_add_videos,
+    handle_create_playlist,
+    handle_delete_playlist,
+    handle_like_all,
+    handle_remove_video,
+    handle_reorder,
+)
 
 router = APIRouter(prefix="/api/playlists", tags=["playlists"])
 
@@ -51,55 +59,50 @@ async def get_playlist_videos(playlist_id: str, request: Request):
     return {"playlist": dict(playlist), "videos": [dict(r) for r in rows]}
 
 
-@router.post("", status_code=202)
-async def create_playlist(body: CreatePlaylistRequest, request: Request):
-    from youtube_helper.web.queue import QueueManager
-
-    qm = QueueManager(request.app.state.db_path)
-    op_id = qm.submit("create_playlist", body.model_dump())
-    return {"operation_id": op_id, "message": "Create playlist queued"}
-
-
-@router.delete("/{playlist_id}", status_code=202)
-async def delete_playlist(playlist_id: str, request: Request):
-    from youtube_helper.web.queue import QueueManager
-
-    qm = QueueManager(request.app.state.db_path)
-    op_id = qm.submit("delete_playlist", {"playlist_id": playlist_id})
-    return {"operation_id": op_id, "message": "Delete playlist queued"}
-
-
-@router.post("/{playlist_id}/videos", status_code=202)
-async def add_videos(playlist_id: str, body: AddVideosRequest, request: Request):
-    from youtube_helper.web.queue import QueueManager
-
-    qm = QueueManager(request.app.state.db_path)
-    op_id = qm.submit(
-        "add_videos", {"playlist_id": playlist_id, "video_ids": body.video_ids}
+@router.post("")
+async def create_playlist(body: CreatePlaylistRequest):
+    result = await handle_create_playlist(
+        title=body.title, description=body.description, privacy=body.privacy
     )
-    return {"operation_id": op_id, "message": "Add videos queued"}
+    return result
 
 
-@router.delete("/{playlist_id}/videos/{video_id}", status_code=202)
-async def remove_video(playlist_id: str, video_id: str, request: Request):
-    from youtube_helper.web.queue import QueueManager
-
-    qm = QueueManager(request.app.state.db_path)
-    op_id = qm.submit(
-        "remove_video", {"playlist_id": playlist_id, "video_id": video_id}
-    )
-    return {"operation_id": op_id, "message": "Remove video queued"}
+@router.delete("/{playlist_id}")
+async def delete_playlist(playlist_id: str):
+    result = await handle_delete_playlist(playlist_id=playlist_id)
+    return result
 
 
-@router.put("/{playlist_id}/reorder", status_code=202)
-async def reorder_playlist(
-    playlist_id: str, body: ReorderRequest, request: Request
-):
-    from youtube_helper.web.queue import QueueManager
+@router.post("/{playlist_id}/videos")
+async def add_videos(playlist_id: str, body: AddVideosRequest):
+    result = await handle_add_videos(playlist_id=playlist_id, video_ids=body.video_ids)
+    return result
 
-    qm = QueueManager(request.app.state.db_path)
-    op_id = qm.submit(
-        "reorder_playlist",
-        {"playlist_id": playlist_id, "video_ids": body.video_ids},
-    )
-    return {"operation_id": op_id, "message": "Reorder queued"}
+
+@router.delete("/{playlist_id}/videos/{video_id}")
+async def remove_video(playlist_id: str, video_id: str):
+    result = await handle_remove_video(playlist_id=playlist_id, video_id=video_id)
+    return result
+
+
+@router.put("/{playlist_id}/reorder")
+async def reorder_playlist(playlist_id: str, body: ReorderRequest):
+    result = await handle_reorder(playlist_id=playlist_id, video_ids=body.video_ids)
+    return result
+
+
+@router.post("/{playlist_id}/like-all")
+async def like_all_videos(playlist_id: str, request: Request):
+    conn = get_connection(request.app.state.db_path)
+    rows = conn.execute(
+        """SELECT pv.video_id FROM playlist_videos pv
+           LEFT JOIN liked_videos lv ON pv.video_id = lv.video_id AND lv.removed_at IS NULL
+           WHERE pv.playlist_id = ? AND pv.removed_at IS NULL AND lv.video_id IS NULL""",
+        (playlist_id,),
+    ).fetchall()
+    conn.close()
+    video_ids = [r["video_id"] for r in rows]
+    if not video_ids:
+        return {"message": "All videos already liked"}
+    result = await handle_like_all(video_ids=video_ids)
+    return result
