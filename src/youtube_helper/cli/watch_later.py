@@ -32,54 +32,48 @@ def watch_later() -> None:
     """Watch Later playlist management."""
 
 
-@watch_later.command()
-@click.option(
-    "--headless",
-    is_flag=True,
-    help="Run browser in headless mode.",
-)
-def scrape(headless: bool) -> None:
-    """Scrape Watch Later playlist via Playwright."""
-    settings = Settings()
-    settings.ensure_dirs()
+@watch_later.command(name="import")
+@click.argument("file_path", type=click.Path(exists=True))
+def import_takeout(file_path: str) -> None:
+    """Import Watch Later from Google Takeout export file."""
+    from pathlib import Path
 
-    from youtube_helper.browser.watch_later import (
-        scrape_watch_later,
-    )
+    from youtube_helper.db.connection import get_connection
     from youtube_helper.db.migrations import run_migrations
-    from youtube_helper.watch_later.manager import (
-        WatchLaterManager,
-    )
+    from youtube_helper.takeout import parse_takeout_watch_later
 
+    settings = Settings()
     run_migrations(str(settings.db_path))
 
-    console.print(
-        Panel(
-            "[cyan]Launching Chrome to scrape "
-            "Watch Later playlist.\n"
-            "Your existing Chrome profile will be "
-            "used for authentication.[/cyan]",
-            title="[bold]Watch Later Scraper[/bold]",
-            border_style="cyan",
+    data = Path(file_path).read_bytes()
+    videos = parse_takeout_watch_later(data)
+
+    if not videos:
+        console.print("[yellow]No videos found in file.[/yellow]")
+        return
+
+    conn = get_connection(str(settings.db_path))
+    conn.execute(
+        "INSERT OR IGNORE INTO playlists (id, title, source) VALUES ('WL', 'Watch Later', 'takeout')"
+    )
+    for i, v in enumerate(videos):
+        conn.execute(
+            "INSERT INTO videos (id, title) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET title = excluded.title",
+            (v["video_id"], v.get("title", "")),
         )
-    )
-
-    videos = asyncio.run(
-        scrape_watch_later(headless=headless)
-    )
-
-    manager = WatchLaterManager(str(settings.db_path))
-    saved = manager.save_scraped_videos(videos)
-
-    console.print(
-        Panel(
-            f"[green]Scraped and saved "
-            f"[bold]{saved}[/bold] videos "
-            f"from Watch Later[/green]",
-            title="[bold]Scrape Complete[/bold]",
-            border_style="green",
+        conn.execute(
+            "INSERT INTO playlist_videos (playlist_id, video_id, position) VALUES ('WL', ?, ?) "
+            "ON CONFLICT(playlist_id, video_id) DO NOTHING",
+            (v["video_id"], i),
         )
-    )
+    conn.commit()
+    conn.close()
+
+    console.print(Panel(
+        f"[green]Imported [bold]{len(videos)}[/bold] videos from Takeout file[/green]",
+        title="[bold]Import Complete[/bold]",
+        border_style="green",
+    ))
 
 
 @watch_later.command(name="show-watched")
@@ -448,7 +442,20 @@ def purge(
         "\n[cyan]Launching browser to remove "
         "videos...[/cyan]"
     )
-    asyncio.run(_purge_via_browser(watched, headless))
+
+    from youtube_helper.browser.watch_later import (
+        purge_videos_from_watch_later,
+    )
+
+    def progress_update(**kwargs):
+        # Simple progress callback for CLI
+        pass
+
+    result = asyncio.run(purge_videos_from_watch_later(
+        video_ids=[v["id"] for v in watched],
+        update=progress_update,
+        headless=headless,
+    ))
 
     manager.remove_videos_from_db(
         "WL", [v["id"] for v in watched]
@@ -457,114 +464,10 @@ def purge(
     console.print(
         Panel(
             f"[green]Removed "
-            f"[bold]{len(watched)}[/bold] "
+            f"[bold]{result['removed']}[/bold] "
             f"watched videos from "
             f"Watch Later[/green]",
             title="[bold]Purge Complete[/bold]",
-            border_style="green",
-        )
-    )
-
-
-@watch_later.command(name="prune-exports")
-def prune_exports() -> None:
-    """Remove watched videos from export playlists."""
-    settings = Settings()
-
-    from youtube_helper.api.auth import (
-        get_authenticated_service,
-    )
-    from youtube_helper.api.playlists import (
-        PlaylistClient,
-    )
-    from youtube_helper.db.connection import (
-        get_connection,
-    )
-
-    with console.status(
-        "[bold cyan]Connecting to YouTube..."
-        "[/bold cyan]",
-        spinner="dots",
-    ):
-        youtube = get_authenticated_service(settings)
-        client = PlaylistClient(youtube)
-
-    all_playlists = client.list_playlists()
-    export_playlists = [
-        p
-        for p in all_playlists
-        if p["snippet"]["title"].startswith(
-            "Watch Later Export"
-        )
-    ]
-
-    if not export_playlists:
-        console.print(
-            "[yellow]No Watch Later Export "
-            "playlists found.[/yellow]"
-        )
-        return
-
-    console.print(
-        f"\n[cyan]Found {len(export_playlists)} "
-        f"export playlists[/cyan]\n"
-    )
-
-    total_pruned = 0
-    for pl in export_playlists:
-        pl_id = pl["id"]
-        pl_title = pl["snippet"]["title"]
-        items = client.list_playlist_items(pl_id)
-
-        prunable = []
-        for item in items:
-            vid_id = item["snippet"]["resourceId"][
-                "videoId"
-            ]
-            conn = get_connection(
-                str(settings.db_path)
-            )
-            video = conn.execute(
-                "SELECT watch_progress FROM videos "
-                "WHERE id = ?",
-                (vid_id,),
-            ).fetchone()
-            conn.close()
-            if video and video["watch_progress"] >= 50.0:
-                prunable.append(item)
-
-        if prunable:
-            console.print(
-                f"  [bold]{pl_title}[/bold]: "
-                f"{len(prunable)} watched videos "
-                f"to remove"
-            )
-            if click.confirm(
-                f"  Remove {len(prunable)} watched "
-                f"videos from '{pl_title}'?"
-            ):
-                for item in prunable:
-                    client.remove_from_playlist(
-                        item["id"]
-                    )
-                total_pruned += len(prunable)
-                console.print(
-                    f"  [green]Removed "
-                    f"{len(prunable)} videos[/green]"
-                )
-        else:
-            console.print(
-                f"  [dim]{pl_title}: no watched "
-                f"videos to prune[/dim]"
-            )
-
-    console.print(
-        Panel(
-            f"[green]Pruned "
-            f"[bold]{total_pruned}[/bold] "
-            f"watched videos from "
-            f"export playlists[/green]",
-            title="[bold]Prune Complete[/bold]",
             border_style="green",
         )
     )
@@ -620,106 +523,3 @@ def _add_videos_to_playlist(
             progress.update(task, advance=1)
 
 
-async def _purge_via_browser(
-    videos: list[dict], headless: bool
-) -> None:
-    """Remove videos from Watch Later via browser."""
-    import re
-
-    from playwright.async_api import async_playwright
-
-    from youtube_helper.browser.watch_later import (
-        find_chrome_profile_path,
-    )
-
-    chrome_path = find_chrome_profile_path()
-    video_ids = {v["id"] for v in videos}
-
-    async with async_playwright() as p:
-        ctx = await p.chromium.launch_persistent_context(
-            user_data_dir=chrome_path,
-            channel="chrome",
-            headless=headless,
-            args=[
-                "--disable-blink-features="
-                "AutomationControlled"
-            ],
-        )
-        page = (
-            ctx.pages[0]
-            if ctx.pages
-            else await ctx.new_page()
-        )
-
-        await page.goto(
-            "https://www.youtube.com/playlist?list=WL",
-            wait_until="networkidle",
-        )
-        await page.wait_for_selector(
-            "ytd-playlist-video-renderer",
-            timeout=15000,
-        )
-
-        for _ in range(50):
-            await page.evaluate(
-                "window.scrollBy(0, window.innerHeight)"
-            )
-            await page.wait_for_timeout(500)
-
-        removed = 0
-        renderers = await page.query_selector_all(
-            "ytd-playlist-video-renderer"
-        )
-
-        for renderer in renderers:
-            link = await renderer.query_selector(
-                "a#thumbnail"
-            )
-            href = (
-                await link.get_attribute("href")
-                if link
-                else ""
-            )
-            match = re.search(r"v=([^&]+)", href or "")
-            if not match:
-                continue
-            vid = match.group(1)
-
-            if vid in video_ids:
-                menu_btn = await renderer.query_selector(
-                    "yt-icon-button#button, "
-                    "button[aria-label='Action menu']"
-                )
-                if menu_btn:
-                    await menu_btn.click()
-                    await page.wait_for_timeout(300)
-
-                    sel = (
-                        "tp-yt-paper-listbox "
-                        "ytd-menu-service-item-renderer"
-                        ":has-text('Remove from')"
-                    )
-                    remove_btn = (
-                        await page.query_selector(sel)
-                    )
-                    if not remove_btn:
-                        sel2 = (
-                            "ytd-menu-service-item-"
-                            "renderer"
-                            ":has-text('Remove')"
-                        )
-                        remove_btn = (
-                            await page.query_selector(
-                                sel2
-                            )
-                        )
-                    if remove_btn:
-                        await remove_btn.click()
-                        await page.wait_for_timeout(500)
-                        removed += 1
-
-        console.print(
-            f"\n[green]Removed {removed}/"
-            f"{len(video_ids)} videos[/green]"
-        )
-        await ctx.close()
