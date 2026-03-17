@@ -1,6 +1,8 @@
 const BASE = '/api'
+const isDev = import.meta.env.DEV
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  if (isDev) console.debug('[api]', options?.method || 'GET', path)
   const { headers, ...rest } = options ?? {}
   const resp = await fetch(`${BASE}${path}`, {
     ...rest,
@@ -8,9 +10,19 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   })
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({ detail: resp.statusText }))
+    if (isDev) console.error('[api] Error:', path, err.detail)
     throw new Error(err.detail || `HTTP ${resp.status}`)
   }
   return resp.json()
+}
+
+export interface TaskStatus {
+  status: string
+  progress: number
+  message: string
+  error: string | null
+  removed?: number
+  total?: number
 }
 
 export const api = {
@@ -42,35 +54,35 @@ export const api = {
       `/playlists/${id}/videos`,
     ),
   createPlaylist: (data: { title: string; privacy?: string }) =>
-    request<QueuedOp>('/playlists', {
+    request<{ id: string; title: string }>('/playlists', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
   deletePlaylist: (id: string) =>
-    request<QueuedOp>(`/playlists/${id}`, { method: 'DELETE' }),
+    request<{ deleted: string }>(`/playlists/${id}`, { method: 'DELETE' }),
   addVideos: (playlistId: string, videoIds: string[]) =>
-    request<QueuedOp>(`/playlists/${playlistId}/videos`, {
+    request<{ added: number }>(`/playlists/${playlistId}/videos`, {
       method: 'POST',
       body: JSON.stringify({ video_ids: videoIds }),
     }),
   removeVideo: (playlistId: string, videoId: string) =>
-    request<QueuedOp>(`/playlists/${playlistId}/videos/${videoId}`, {
+    request<{ removed: string }>(`/playlists/${playlistId}/videos/${videoId}`, {
       method: 'DELETE',
     }),
   reorderPlaylist: (playlistId: string, videoIds: string[]) =>
-    request<QueuedOp>(`/playlists/${playlistId}/reorder`, {
+    request<{ reordered: boolean }>(`/playlists/${playlistId}/reorder`, {
       method: 'PUT',
       body: JSON.stringify({ video_ids: videoIds }),
     }),
   likeAllPlaylist: (playlistId: string) =>
-    request<QueuedOp>(`/playlists/${playlistId}/like-all`, { method: 'POST' }),
+    request<Record<string, unknown>>(`/playlists/${playlistId}/like-all`, { method: 'POST' }),
 
   // Videos
   likedVideos: () => request<{ videos: Video[] }>('/videos/liked'),
   likeVideo: (id: string) =>
-    request<QueuedOp>(`/videos/${id}/like`, { method: 'POST' }),
+    request<{ video_id: string; status: string }>(`/videos/${id}/like`, { method: 'POST' }),
   unlikeVideo: (id: string) =>
-    request<QueuedOp>(`/videos/${id}/like`, { method: 'DELETE' }),
+    request<{ video_id: string; status: string }>(`/videos/${id}/like`, { method: 'DELETE' }),
   listAllVideos: () => request<{ videos: VideoWithPlaylists[] }>('/videos'),
 
   // Watch Later
@@ -83,20 +95,25 @@ export const api = {
     request<{ videos: Video[] }>(
       `/watch-later/unwatched?threshold=${threshold}`,
     ),
-  scrapeWatchLater: () =>
-    request<QueuedOp>('/watch-later/scrape', { method: 'POST' }),
+  importWatchLater: (file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return fetch(`${BASE}/watch-later/import`, { method: 'POST', body: form })
+      .then(r => {
+        if (!r.ok) return r.json().then(e => { throw new Error(e.detail || 'Import failed') })
+        return r.json() as Promise<{ imported: number; total_parsed: number }>
+      })
+  },
   exportWatchLater: (data: { target: string; threshold: number }) =>
-    request<QueuedOp>('/watch-later/export', {
+    request<{ exported: number; playlist_id: string }>('/watch-later/export', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
   purgeWatchLater: (data: { threshold: number }) =>
-    request<QueuedOp>('/watch-later/purge', {
+    request<{ status: string; message: string; total: number }>('/watch-later/purge', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
-  pruneExports: () =>
-    request<QueuedOp>('/watch-later/prune-exports', { method: 'POST' }),
 
   // Search
   search: (q: string, threshold?: number) =>
@@ -108,16 +125,11 @@ export const api = {
   resetDatabase: () => request<{ message: string }>('/reset', { method: 'POST' }),
 
   // Sync
-  sync: () => request<QueuedOp>('/sync', { method: 'POST' }),
+  sync: () => request<{ status: string; message: string }>('/sync', { method: 'POST' }),
+  syncStatus: () => request<TaskStatus>('/sync/status'),
 
-  // Queue
-  listQueue: () => request<{ operations: QueueOp[] }>('/queue'),
-  cancelOp: (id: number) =>
-    request<{ message: string }>(`/queue/${id}`, { method: 'DELETE' }),
-  retryOp: (id: number) =>
-    request<{ message: string }>(`/queue/${id}/retry`, { method: 'POST' }),
-  skipOp: (id: number) =>
-    request<{ message: string }>(`/queue/${id}/skip`, { method: 'POST' }),
+  // Purge status
+  purgeStatus: () => request<TaskStatus>('/watch-later/purge/status'),
 }
 
 // Types
@@ -152,22 +164,4 @@ export interface VideoWithPlaylists extends Video {
 export interface SearchResult extends Partial<Video>, Partial<Playlist> {
   type: 'video' | 'playlist'
   score: number
-}
-
-export interface QueueOp {
-  id: number
-  type: string
-  params: string
-  status: string
-  progress: number
-  message: string
-  error: string
-  created_at: string
-  started_at: string | null
-  completed_at: string | null
-}
-
-export interface QueuedOp {
-  operation_id: number
-  message: string
 }

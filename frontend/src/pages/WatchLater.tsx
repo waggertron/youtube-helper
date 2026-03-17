@@ -13,30 +13,28 @@ import VideoPlayerDialog from '../components/VideoPlayerDialog'
 import ConfirmDialog from '../components/ConfirmDialog'
 import {
   useWatchLater,
-  useScrape,
+  useImportWatchLater,
   useExportWL,
   usePurgeWL,
-  usePruneExports,
 } from '../hooks/useApi'
 
 export default function WatchLater() {
   const [threshold, setThreshold] = useState(80)
   const [confirmExport, setConfirmExport] = useState(false)
   const [confirmPurge, setConfirmPurge] = useState(false)
-  const [confirmPrune, setConfirmPrune] = useState(false)
   const [viewMode, setViewMode] = useState<ViewMode>('compact')
   const [playingVideo, setPlayingVideo] = useState<string | null>(null)
 
   const { data } = useWatchLater()
-  const scrape = useScrape()
+  const importWL = useImportWatchLater()
   const exportWL = useExportWL()
   const purgeWL = usePurgeWL()
-  const pruneExports = usePruneExports()
 
   const videos = data?.videos ?? []
 
-  const handleScrape = () => {
-    scrape.mutate()
+  const handleImport = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (file) importWL.mutate(file)
   }
 
   const handleExportConfirm = () => {
@@ -51,11 +49,6 @@ export default function WatchLater() {
 
   const watchedCount = videos.filter(v => v.watch_progress >= threshold).length
 
-  const handlePruneConfirm = () => {
-    pruneExports.mutate()
-    setConfirmPrune(false)
-  }
-
   return (
     <Box>
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
@@ -64,13 +57,10 @@ export default function WatchLater() {
       </Box>
 
       <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap' }}>
-        <Tooltip title="Launch Chrome to scan your Watch Later playlist. This opens a browser window using your Chrome profile and scrolls through Watch Later to detect video metadata and watch progress from thumbnail progress bars. Uses zero API quota.">
-          <Button
-            variant="contained"
-            onClick={handleScrape}
-            disabled={scrape.isPending}
-          >
-            Scrape
+        <Tooltip title="Import Watch Later videos from a Google Takeout export file (JSON or CSV).">
+          <Button variant="contained" component="label" disabled={importWL.isPending}>
+            Import
+            <input type="file" hidden accept=".json,.csv" onChange={handleImport} />
           </Button>
         </Tooltip>
 
@@ -92,16 +82,6 @@ export default function WatchLater() {
             disabled={purgeWL.isPending}
           >
             Purge
-          </Button>
-        </Tooltip>
-
-        <Tooltip title="Scan all Watch Later Export playlists and remove videos you've since watched. Helps keep export playlists clean over time. Uses API quota for list + remove operations.">
-          <Button
-            variant="contained"
-            onClick={() => setConfirmPrune(true)}
-            disabled={pruneExports.isPending}
-          >
-            Prune Exports
           </Button>
         </Tooltip>
       </Box>
@@ -139,14 +119,6 @@ export default function WatchLater() {
         description={`Purge ${watchedCount} video${watchedCount !== 1 ? 's' : ''} watched above ${threshold}% from your Watch Later playlist. This opens Chrome and removes videos automatically.`}
         onConfirm={handlePurgeConfirm}
         onCancel={() => setConfirmPurge(false)}
-      />
-
-      <ConfirmDialog
-        open={confirmPrune}
-        title="Confirm Prune"
-        description="Remove watched videos from all Watch Later Export playlists. This scans export playlists and removes videos you've since watched."
-        onConfirm={handlePruneConfirm}
-        onCancel={() => setConfirmPrune(false)}
       />
 
       <VideoPlayerDialog videoId={playingVideo} onClose={() => setPlayingVideo(null)} />

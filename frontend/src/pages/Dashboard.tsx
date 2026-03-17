@@ -1,21 +1,16 @@
 import {
-  Box, Card, CardContent, Typography, Grid, Button, Tooltip, Chip, Stack,
+  Box, Card, CardContent, Typography, Grid, Button, Tooltip, Stack,
 } from '@mui/material'
 import { Sync, WatchLater, PlaylistPlay, VideoLibrary } from '@mui/icons-material'
-import { usePlaylists, useWatchLater, useSync, useScrape, useQueue } from '../hooks/useApi'
+import { usePlaylists, useWatchLater, useSync } from '../hooks/useApi'
 
 export default function Dashboard() {
   const { data: playlistData } = usePlaylists()
   const { data: wlData } = useWatchLater()
-  const { data: queueData } = useQueue()
   const syncMutation = useSync()
-  const scrapeMutation = useScrape()
 
   const playlists = playlistData?.playlists ?? []
   const wlVideos = wlData?.videos ?? []
-  const queue = queueData?.operations ?? []
-  const activeOps = queue.filter(op => op.status === 'active')
-  const pendingOps = queue.filter(op => op.status === 'pending')
   const totalVideos = playlists.reduce((sum, p) => sum + (p.video_count || 0), 0)
 
   const cards = [
@@ -58,37 +53,7 @@ export default function Dashboard() {
             </Button>
           </span>
         </Tooltip>
-        <Tooltip title="Launch Chrome using your logged-in profile to scroll through your Watch Later playlist and extract video metadata plus watch progress from the thumbnail progress bars. Uses zero API quota.">
-          <span>
-            <Button
-              variant="contained"
-              color="secondary"
-              startIcon={<WatchLater />}
-              onClick={() => scrapeMutation.mutate()}
-              disabled={scrapeMutation.isPending}
-            >
-              Scrape Watch Later
-            </Button>
-          </span>
-        </Tooltip>
       </Stack>
-
-      {(activeOps.length > 0 || pendingOps.length > 0) && (
-        <Box>
-          <Typography variant="h5" gutterBottom>Queue Status</Typography>
-          {activeOps.map(op => (
-            <Chip
-              key={op.id}
-              label={`${op.type}: ${op.message || 'Running...'} (${op.progress.toFixed(0)}%)`}
-              color="primary"
-              sx={{ mr: 1 }}
-            />
-          ))}
-          {pendingOps.length > 0 && (
-            <Chip label={`${pendingOps.length} pending`} variant="outlined" />
-          )}
-        </Box>
-      )}
     </Box>
   )
 }

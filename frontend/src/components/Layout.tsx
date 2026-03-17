@@ -1,24 +1,14 @@
 import {
   Box, Drawer, List, ListItemButton, ListItemIcon, ListItemText,
-  AppBar, Toolbar, Typography, IconButton, Badge,
+  AppBar, Toolbar, Typography, IconButton,
 } from '@mui/material'
 import {
-  Dashboard as DashboardIcon,
-  PlaylistPlay,
-  WatchLater,
-  Search as SearchIcon,
-  VideoLibrary,
-  ThumbUp,
-  Settings,
+  Dashboard as DashboardIcon, PlaylistPlay, WatchLater,
+  Search as SearchIcon, VideoLibrary, ThumbUp, Settings,
   Menu as MenuIcon,
-  Queue as QueueIcon,
 } from '@mui/icons-material'
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useState } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
-import { useQueue } from '../hooks/useApi'
-import { useSSE } from '../hooks/useSSE'
-import QueuePanel from './QueuePanel'
 
 const DRAWER_WIDTH = 240
 
@@ -36,27 +26,6 @@ export default function Layout() {
   const navigate = useNavigate()
   const location = useLocation()
   const [mobileOpen, setMobileOpen] = useState(false)
-  const [queueOpen, setQueueOpen] = useState(false)
-  const qc = useQueryClient()
-  const { data } = useQueue()
-  const operations = data?.operations ?? []
-  const activeCount = operations.filter(
-    (op) => op.status === 'active' || op.status === 'pending',
-  ).length
-
-  // Wire SSE events to instantly refresh queue data
-  useSSE((event) => {
-    if (event.type === 'queue') {
-      qc.invalidateQueries({ queryKey: ['queue'] })
-      // Also refresh data that operations may have changed
-      if (event.status === 'completed') {
-        qc.invalidateQueries({ queryKey: ['playlists'] })
-        qc.invalidateQueries({ queryKey: ['watch-later'] })
-        qc.invalidateQueries({ queryKey: ['liked-videos'] })
-        qc.invalidateQueries({ queryKey: ['all-videos'] })
-      }
-    }
-  })
 
   const drawer = (
     <Box>
@@ -96,22 +65,12 @@ export default function Layout() {
           <Typography variant="h6" noWrap sx={{ flexGrow: 1 }}>
             YouTube Helper
           </Typography>
-          <IconButton
-            aria-label="open queue panel"
-            color="inherit"
-            onClick={() => setQueueOpen(!queueOpen)}
-          >
-            <Badge badgeContent={activeCount} color="error">
-              <QueueIcon />
-            </Badge>
-          </IconButton>
         </Toolbar>
       </AppBar>
       <Drawer
         variant="permanent"
         sx={{
-          width: DRAWER_WIDTH,
-          flexShrink: 0,
+          width: DRAWER_WIDTH, flexShrink: 0,
           display: { xs: 'none', sm: 'block' },
           '& .MuiDrawer-paper': { width: DRAWER_WIDTH, boxSizing: 'border-box' },
         }}
@@ -121,11 +80,6 @@ export default function Layout() {
       <Box component="main" sx={{ flexGrow: 1, p: 3, mt: 8 }}>
         <Outlet />
       </Box>
-      <QueuePanel
-        operations={operations}
-        open={queueOpen}
-        onClose={() => setQueueOpen(false)}
-      />
     </Box>
   )
 }

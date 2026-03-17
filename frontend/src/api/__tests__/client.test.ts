@@ -23,8 +23,8 @@ describe('API client', () => {
 
   it('submits sync operation', async () => {
     const data = await api.sync()
-    expect(data.operation_id).toBe(1)
-    expect(data.message).toBe('Sync queued')
+    expect(data.status).toBe('running')
+    expect(data.message).toBe('Sync started')
   })
 
   it('searches with query', async () => {
@@ -41,11 +41,6 @@ describe('API client', () => {
   it('fetches liked videos', async () => {
     const data = await api.likedVideos()
     expect(data.videos).toEqual([])
-  })
-
-  it('fetches queue operations', async () => {
-    const data = await api.listQueue()
-    expect(data.operations).toEqual([])
   })
 
   it('throws on HTTP error', async () => {

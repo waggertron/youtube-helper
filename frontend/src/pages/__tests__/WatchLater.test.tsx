@@ -51,12 +51,11 @@ describe('WatchLater', () => {
     expect(screen.getByText('Watch Later')).toBeInTheDocument()
   })
 
-  it('shows action buttons with descriptions', () => {
+  it('shows action buttons', () => {
     renderWithProviders(<WatchLater />)
-    expect(getButtonByText(/^Scrape$/)).toBeInTheDocument()
+    expect(getButtonByText(/^Import$/)).toBeInTheDocument()
     expect(getButtonByText(/^Export$/)).toBeInTheDocument()
     expect(getButtonByText(/^Purge$/)).toBeInTheDocument()
-    expect(getButtonByText(/^Prune Exports$/)).toBeInTheDocument()
   })
 
   it('displays videos from API', async () => {
@@ -90,18 +89,12 @@ describe('WatchLater', () => {
     expect(screen.getByRole('slider')).toBeInTheDocument()
   })
 
-  it('scrape button triggers mutation', async () => {
-    let scrapeCalled = false
-    server.use(
-      http.post('/api/watch-later/scrape', () => {
-        scrapeCalled = true
-        return HttpResponse.json({ operation_id: 1, message: 'Scrape queued' })
-      }),
-    )
-    const user = userEvent.setup()
+  it('import button has file input', () => {
     renderWithProviders(<WatchLater />)
-    await user.click(getButtonByText(/^Scrape$/))
-    await waitFor(() => expect(scrapeCalled).toBe(true))
+    const importButton = getButtonByText(/^Import$/)
+    const fileInput = importButton.querySelector('input[type="file"]')
+    expect(fileInput).toBeInTheDocument()
+    expect(fileInput).toHaveAttribute('accept', '.json,.csv')
   })
 
   it('export button shows confirmation dialog with video count', async () => {
@@ -139,34 +132,5 @@ describe('WatchLater', () => {
       // Default threshold is 80%, so V2 (90%) and V3 (100%) are above threshold = 2 videos
       expect(screen.getByText(/Purge 2 videos watched above 80%/)).toBeInTheDocument()
     })
-  })
-
-  it('prune exports button shows confirmation dialog', async () => {
-    const user = userEvent.setup()
-    renderWithProviders(<WatchLater />)
-    await user.click(getButtonByText(/^Prune Exports$/))
-    await waitFor(() => {
-      expect(screen.getByText(/Confirm Prune/i)).toBeInTheDocument()
-      expect(screen.getByText(/Remove watched videos from all Watch Later Export playlists/)).toBeInTheDocument()
-    })
-  })
-
-  it('prune exports does not fire mutation until confirm is clicked', async () => {
-    let pruneCalled = false
-    server.use(
-      http.post('/api/watch-later/prune-exports', () => {
-        pruneCalled = true
-        return HttpResponse.json({ operation_id: 1, message: 'Prune queued' })
-      }),
-    )
-    const user = userEvent.setup()
-    renderWithProviders(<WatchLater />)
-    await user.click(getButtonByText(/^Prune Exports$/))
-    await waitFor(() => {
-      expect(screen.getByText(/Confirm Prune/i)).toBeInTheDocument()
-    })
-    expect(pruneCalled).toBe(false)
-    await user.click(screen.getByText('Confirm'))
-    await waitFor(() => expect(pruneCalled).toBe(true))
   })
 })

@@ -9,12 +9,11 @@ export const handlers = [
     HttpResponse.json({ authenticated: false, has_client_secret: false, has_token: false })
   ),
   http.get('/api/videos', () => HttpResponse.json({ videos: [] })),
-  http.get('/api/queue', () => HttpResponse.json({ operations: [] })),
   http.get('/api/search', ({ request }) => {
     const url = new URL(request.url)
     return HttpResponse.json({ query: url.searchParams.get('q'), results: [] })
   }),
-  http.post('/api/sync', () => HttpResponse.json({ operation_id: 1, message: 'Sync queued' })),
+  http.post('/api/sync', () => HttpResponse.json({ status: 'running', message: 'Sync started' })),
   http.post('/api/reset', () => HttpResponse.json({ message: 'Database cleared' })),
   http.post('/api/auth/upload-secret', () => HttpResponse.json({ message: 'Client secret saved' })),
   http.get('/api/auth/start', () =>
