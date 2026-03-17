@@ -1,46 +1,17 @@
 # tests/test_handlers.py
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from youtube_helper.db.connection import get_connection
 from youtube_helper.db.migrations import run_migrations
-from youtube_helper.web.events import EventBroadcaster
 from youtube_helper.web.handlers import (
     handle_delete_playlist,
     handle_like,
+    handle_like_all,
     handle_remove_video,
     handle_unlike,
-    register_all_handlers,
 )
-from youtube_helper.web.processor import QueueProcessor
-
-
-class TestHandlerRegistration:
-    def test_all_handlers_registered(self, tmp_path):
-        db_path = str(tmp_path / "test.db")
-        run_migrations(db_path)
-        broadcaster = EventBroadcaster()
-        processor = QueueProcessor(db_path, broadcaster)
-        register_all_handlers(processor)
-        expected = [
-            "sync",
-            "scrape_watch_later",
-            "export_watch_later",
-            "purge_watch_later",
-            "prune_exports",
-            "create_playlist",
-            "delete_playlist",
-            "add_videos",
-            "remove_video",
-            "reorder_playlist",
-            "like_video",
-            "unlike_video",
-        ]
-        for op_type in expected:
-            assert op_type in processor._handlers, (
-                f"Missing handler: {op_type}"
-            )
 
 
 @pytest.fixture
@@ -106,7 +77,6 @@ class TestDeletePlaylistSoftDeletes:
     async def test_delete_playlist_soft_deletes_videos(self, handler_db):
         """playlist_videos rows get removed_at set; playlist itself is deleted."""
         youtube = _mock_youtube()
-        progress = AsyncMock()
 
         with (
             patch(
@@ -118,9 +88,9 @@ class TestDeletePlaylistSoftDeletes:
                 return_value=(youtube, _mock_playlist_client()),
             ),
         ):
-            await handle_delete_playlist(
-                {"playlist_id": "PL1"}, progress,
-            )
+            result = await handle_delete_playlist(playlist_id="PL1")
+
+        assert result == {"deleted": "PL1"}
 
         conn = get_connection(handler_db)
 
@@ -154,8 +124,6 @@ class TestRemoveVideoSoftDeletes:
     @pytest.mark.asyncio
     async def test_remove_video_soft_deletes(self, handler_db):
         """playlist_videos row gets removed_at set, not hard deleted."""
-        progress = AsyncMock()
-
         with (
             patch(
                 "youtube_helper.config.settings.Settings",
@@ -166,9 +134,11 @@ class TestRemoveVideoSoftDeletes:
                 return_value=(_mock_youtube(), _mock_playlist_client()),
             ),
         ):
-            await handle_remove_video(
-                {"playlist_id": "PL1", "video_id": "V2"}, progress,
+            result = await handle_remove_video(
+                playlist_id="PL1", video_id="V2",
             )
+
+        assert result == {"removed": "V2"}
 
         conn = get_connection(handler_db)
 
@@ -194,8 +164,6 @@ class TestUnlikeSoftDeletes:
     @pytest.mark.asyncio
     async def test_unlike_soft_deletes(self, handler_db):
         """liked_videos row gets removed_at set, not hard deleted."""
-        progress = AsyncMock()
-
         with (
             patch(
                 "youtube_helper.config.settings.Settings",
@@ -206,7 +174,9 @@ class TestUnlikeSoftDeletes:
                 return_value=(_mock_youtube(), _mock_playlist_client()),
             ),
         ):
-            await handle_unlike({"video_id": "V1"}, progress)
+            result = await handle_unlike(video_id="V1")
+
+        assert result == {"video_id": "V1", "status": "unliked"}
 
         conn = get_connection(handler_db)
 
@@ -223,8 +193,6 @@ class TestLikeClearsRemovedAt:
     @pytest.mark.asyncio
     async def test_like_clears_removed_at(self, handler_db):
         """Re-liking a previously unliked video clears removed_at."""
-        progress = AsyncMock()
-
         # First, soft-delete the liked video (simulate unlike)
         conn = get_connection(handler_db)
         conn.execute(
@@ -250,7 +218,9 @@ class TestLikeClearsRemovedAt:
                 return_value=(_mock_youtube(), _mock_playlist_client()),
             ),
         ):
-            await handle_like({"video_id": "V1"}, progress)
+            result = await handle_like(video_id="V1")
+
+        assert result == {"video_id": "V1", "status": "liked"}
 
         conn = get_connection(handler_db)
         row = conn.execute(
@@ -262,3 +232,33 @@ class TestLikeClearsRemovedAt:
         )
         assert row["liked_at"] is not None, "liked_at should be set"
         conn.close()
+
+
+class TestLikeAllHandler:
+    @pytest.mark.asyncio
+    async def test_like_all_likes_unliked_videos(self, handler_db):
+        youtube = _mock_youtube()
+
+        with (
+            patch(
+                "youtube_helper.config.settings.Settings",
+                return_value=_mock_settings(handler_db),
+            ),
+            patch(
+                "youtube_helper.web.handlers._get_youtube_client",
+                return_value=(youtube, _mock_playlist_client()),
+            ),
+        ):
+            result = await handle_like_all(video_ids=["V2", "V3"])
+
+        assert result == {"liked": 2}
+
+        conn = get_connection(handler_db)
+        for vid in ("V2", "V3"):
+            row = conn.execute(
+                "SELECT * FROM liked_videos WHERE video_id = ? AND removed_at IS NULL",
+                (vid,),
+            ).fetchone()
+            assert row is not None, f"{vid} should be liked"
+        conn.close()
+        assert youtube.videos.return_value.rate.call_count == 2

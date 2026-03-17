@@ -1,35 +1,18 @@
-"""Operation handlers for the queue processor.
+"""Operation handlers for web routes.
 
-Each handler is an async function with signature:
-    async def handler(params: dict, progress: Callable) -> None
+Each handler is an async function with named parameters that returns a result dict.
+Slow handlers (sync, purge) accept an `update` callback from BackgroundTasks.
 """
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+import logging
 
-if TYPE_CHECKING:
-    from youtube_helper.web.processor import QueueProcessor
-
-
-def register_all_handlers(processor: QueueProcessor) -> None:
-    """Register all operation handlers with the queue processor."""
-    processor.register_handler("sync", handle_sync)
-    processor.register_handler("scrape_watch_later", handle_scrape)
-    processor.register_handler("export_watch_later", handle_export)
-    processor.register_handler("purge_watch_later", handle_purge)
-    processor.register_handler("prune_exports", handle_prune_exports)
-    processor.register_handler("create_playlist", handle_create_playlist)
-    processor.register_handler("delete_playlist", handle_delete_playlist)
-    processor.register_handler("add_videos", handle_add_videos)
-    processor.register_handler("remove_video", handle_remove_video)
-    processor.register_handler("reorder_playlist", handle_reorder)
-    processor.register_handler("like_video", handle_like)
-    processor.register_handler("unlike_video", handle_unlike)
-    processor.register_handler("like_all", handle_like_all)
+logger = logging.getLogger("youtube_helper.handlers")
 
 
 def _get_youtube_client(db_path: str):
     """Create an authenticated YouTube client and PlaylistClient."""
+    logger.info("Creating authenticated YouTube client")
     from youtube_helper.api.auth import get_authenticated_service
     from youtube_helper.api.playlists import PlaylistClient
     from youtube_helper.config.settings import Settings
@@ -39,46 +22,38 @@ def _get_youtube_client(db_path: str):
     return youtube, PlaylistClient(youtube)
 
 
-async def handle_sync(params, progress):
-    """Sync all playlists from YouTube."""
+async def handle_sync(update) -> None:
+    """Sync all playlists from YouTube.
+
+    Args:
+        update: Callback from BackgroundTasks - update(progress=50, message="...")
+    """
+    logger.info("Starting sync operation")
     from youtube_helper.config.settings import Settings
     from youtube_helper.sync.engine import SyncEngine
 
     settings = Settings()
     db_path = str(settings.db_path)
-    await progress(10.0, "Connecting to YouTube...")
+    update(progress=10, message="Connecting to YouTube...")
     _, client = _get_youtube_client(db_path)
-    await progress(20.0, "Syncing playlists...")
+    update(progress=20, message="Syncing playlists...")
     engine = SyncEngine(db_path, client)
     stats = engine.sync_all()
-    await progress(85.0, "Syncing liked videos...")
+    update(progress=85, message="Syncing liked videos...")
     liked_count = engine.sync_liked_videos()
-    await progress(
-        100.0,
-        f"Synced {stats['playlists']} playlists, {stats['videos']} videos, "
+    update(
+        progress=100,
+        message=f"Synced {stats['playlists']} playlists, {stats['videos']} videos, "
         f"{liked_count} liked videos",
     )
 
 
-async def handle_scrape(params, progress):
-    """Scrape Watch Later playlist via browser automation."""
-    from youtube_helper.browser.watch_later import scrape_watch_later
-    from youtube_helper.config.settings import Settings
-    from youtube_helper.watch_later.manager import WatchLaterManager
+async def handle_export(target: str, threshold: float = 50.0) -> dict:
+    """Export Watch Later playlist to YouTube playlists.
 
-    settings = Settings()
-    await progress(10.0, "Launching Chrome...")
-    videos = await scrape_watch_later(
-        headless=params.get("headless", False),
-    )
-    await progress(80.0, f"Scraped {len(videos)} videos, saving...")
-    manager = WatchLaterManager(str(settings.db_path))
-    saved = manager.save_scraped_videos(videos)
-    await progress(100.0, f"Saved {saved} videos")
-
-
-async def handle_export(params, progress):
-    """Export Watch Later playlist to YouTube playlists."""
+    Returns:
+        {"exported": count, "playlist_id": id}
+    """
     from datetime import datetime
 
     from youtube_helper.config.settings import Settings
@@ -86,23 +61,16 @@ async def handle_export(params, progress):
 
     settings = Settings()
     db_path = str(settings.db_path)
-    threshold = params.get("threshold", 50.0)
-    target = params.get("target", "spacepope videos")
     manager = WatchLaterManager(db_path)
     all_videos = manager.export_playlist_data("WL")
     watched = manager.get_watched_videos(threshold=threshold)
     unwatched = manager.get_unwatched_videos(threshold=threshold)
 
     if not all_videos:
-        await progress(100.0, "No videos found in Watch Later")
-        return
+        return {"exported": 0, "playlist_id": None}
 
-    await progress(10.0, "Connecting to YouTube...")
     youtube, client = _get_youtube_client(db_path)
     date_str = datetime.now().strftime("%Y-%m-%d")
-    await progress(
-        20.0, f"Creating 'Watch Later Export {date_str}'...",
-    )
     export_pl = client.create_playlist(
         f"Watch Later Export {date_str}",
         description=f"Exported from Watch Later on {date_str}",
@@ -115,12 +83,7 @@ async def handle_export(params, progress):
             client.add_to_playlist(export_pl["id"], vid)
         except Exception:
             pass
-        pct = 20 + (i / len(all_videos)) * 20
-        await progress(
-            pct, f"Adding to export ({i + 1}/{len(all_videos)})",
-        )
 
-    await progress(45.0, "Updating Watch Later Archive...")
     playlists = client.list_playlists()
     archive_id = None
     for pl in playlists:
@@ -139,12 +102,7 @@ async def handle_export(params, progress):
             client.add_to_playlist(archive_id, vid)
         except Exception:
             pass
-        pct = 45 + (i / len(all_videos)) * 20
-        await progress(
-            pct, f"Archiving ({i + 1}/{len(all_videos)})",
-        )
 
-    await progress(70.0, f"Copying unwatched to '{target}'...")
     target_id = None
     for pl in playlists:
         if pl["snippet"]["title"] == target:
@@ -160,25 +118,20 @@ async def handle_export(params, progress):
             client.add_to_playlist(target_id, vid)
         except Exception:
             pass
-        if unwatched:
-            pct = 70 + (i / len(unwatched)) * 20
-            await progress(
-                pct,
-                f"Copying unwatched ({i + 1}/{len(unwatched)})",
-            )
 
-    await progress(92.0, "Removing watched from local DB...")
     watched_ids = [v["id"] for v in watched]
     manager.remove_videos_from_db("WL", watched_ids)
-    await progress(
-        100.0,
-        f"Export complete: {len(all_videos)} exported, "
-        f"{len(watched)} removed",
-    )
+    return {"exported": len(all_videos), "playlist_id": export_pl["id"]}
 
 
-async def handle_purge(params, progress):
-    """Purge watched videos from Watch Later via browser automation."""
+async def handle_purge(update, threshold: float = 50.0, headless: bool = True) -> None:
+    """Purge watched videos from Watch Later via browser automation.
+
+    Args:
+        update: Callback from BackgroundTasks - update(progress=50, message="...")
+        threshold: Watch progress percentage to consider "watched".
+        headless: Whether to run Chrome in headless mode.
+    """
     import re
 
     from playwright.async_api import async_playwright
@@ -188,16 +141,14 @@ async def handle_purge(params, progress):
     from youtube_helper.watch_later.manager import WatchLaterManager
 
     settings = Settings()
-    threshold = params.get("threshold", 50.0)
-    headless = params.get("headless", False)
     manager = WatchLaterManager(str(settings.db_path))
     watched = manager.get_watched_videos(threshold=threshold)
     if not watched:
-        await progress(100.0, "No watched videos to purge")
+        update(progress=100, message="No watched videos to purge")
         return
 
-    await progress(
-        10.0, f"Launching Chrome to remove {len(watched)} videos...",
+    update(
+        progress=10, message=f"Launching Chrome to remove {len(watched)} videos...",
     )
     chrome_path = find_chrome_profile_path()
     video_ids = {v["id"] for v in watched}
@@ -258,90 +209,45 @@ async def handle_purge(params, progress):
                         await page.wait_for_timeout(500)
                         removed += 1
                         pct = 10 + (removed / len(video_ids)) * 85
-                        await progress(
-                            pct,
-                            f"Removed {removed}/{len(video_ids)}",
+                        update(
+                            progress=pct,
+                            message=f"Removed {removed}/{len(video_ids)}",
                         )
         await ctx.close()
 
     manager.remove_videos_from_db(
         "WL", [v["id"] for v in watched],
     )
-    await progress(100.0, f"Purged {removed} videos")
+    update(progress=100, message=f"Purged {removed} videos")
 
 
-async def handle_prune_exports(params, progress):
-    """Remove watched videos from export playlists."""
-    from youtube_helper.config.settings import Settings
-    from youtube_helper.db.connection import get_connection
-
-    settings = Settings()
-    db_path = str(settings.db_path)
-    await progress(10.0, "Connecting to YouTube...")
-    _, client = _get_youtube_client(db_path)
-    playlists = client.list_playlists()
-    exports = [
-        p for p in playlists
-        if p["snippet"]["title"].startswith("Watch Later Export")
-    ]
-    if not exports:
-        await progress(100.0, "No export playlists found")
-        return
-
-    total_pruned = 0
-    for i, pl in enumerate(exports):
-        items = client.list_playlist_items(pl["id"])
-        for item in items:
-            vid_id = item["snippet"]["resourceId"]["videoId"]
-            conn = get_connection(db_path)
-            video = conn.execute(
-                "SELECT watch_progress FROM videos WHERE id = ?",
-                (vid_id,),
-            ).fetchone()
-            conn.close()
-            if video and video["watch_progress"] >= 50.0:
-                client.remove_from_playlist(item["id"])
-                total_pruned += 1
-        pct = 10 + ((i + 1) / len(exports)) * 85
-        await progress(
-            pct, f"Pruned {pl['snippet']['title']}",
-        )
-    await progress(
-        100.0,
-        f"Pruned {total_pruned} watched videos "
-        f"from {len(exports)} playlists",
-    )
-
-
-async def handle_create_playlist(params, progress):
+async def handle_create_playlist(
+    title: str, description: str = "", privacy: str = "private",
+) -> dict:
     """Create a new YouTube playlist."""
     from youtube_helper.config.settings import Settings
 
     settings = Settings()
-    await progress(30.0, "Creating playlist...")
     _, client = _get_youtube_client(str(settings.db_path))
-    client.create_playlist(
-        params["title"],
-        description=params.get("description", ""),
-        privacy=params.get("privacy", "private"),
+    result = client.create_playlist(
+        title, description=description, privacy=privacy,
     )
-    await progress(100.0, f"Created '{params['title']}'")
+    return result
 
 
-async def handle_delete_playlist(params, progress):
+async def handle_delete_playlist(playlist_id: str) -> dict:
     """Delete a YouTube playlist."""
     from youtube_helper.config.settings import Settings
     from youtube_helper.db.connection import get_connection
 
     settings = Settings()
-    await progress(30.0, "Deleting playlist...")
     youtube, _ = _get_youtube_client(str(settings.db_path))
-    youtube.playlists().delete(id=params["playlist_id"]).execute()
+    youtube.playlists().delete(id=playlist_id).execute()
     conn = get_connection(str(settings.db_path))
     conn.execute(
         "UPDATE playlist_videos SET removed_at = datetime('now') "
         "WHERE playlist_id = ? AND removed_at IS NULL",
-        (params["playlist_id"],),
+        (playlist_id,),
     )
     conn.commit()
     # Disable FK checks outside a transaction so we can delete the
@@ -349,28 +255,26 @@ async def handle_delete_playlist(params, progress):
     conn.execute("PRAGMA foreign_keys = OFF")
     conn.execute(
         "DELETE FROM playlists WHERE id = ?",
-        (params["playlist_id"],),
+        (playlist_id,),
     )
     conn.commit()
     conn.execute("PRAGMA foreign_keys = ON")
     conn.close()
-    await progress(100.0, "Playlist deleted")
+    return {"deleted": playlist_id}
 
 
-async def handle_add_videos(params, progress):
+async def handle_add_videos(playlist_id: str, video_ids: list[str]) -> dict:
     """Add videos to a YouTube playlist."""
     from youtube_helper.config.settings import Settings
 
     settings = Settings()
     _, client = _get_youtube_client(str(settings.db_path))
-    video_ids = params["video_ids"]
-    for i, vid in enumerate(video_ids):
-        client.add_to_playlist(params["playlist_id"], vid)
-        pct = (i + 1) / len(video_ids) * 100
-        await progress(pct, f"Added {i + 1}/{len(video_ids)}")
+    for vid in video_ids:
+        client.add_to_playlist(playlist_id, vid)
+    return {"added": len(video_ids)}
 
 
-async def handle_remove_video(params, progress):
+async def handle_remove_video(playlist_id: str, video_id: str) -> dict:
     """Remove a video from a YouTube playlist."""
     from youtube_helper.config.settings import Settings
     from youtube_helper.db.connection import get_connection
@@ -382,24 +286,23 @@ async def handle_remove_video(params, progress):
     row = conn.execute(
         "SELECT playlist_item_id FROM playlist_videos "
         "WHERE playlist_id = ? AND video_id = ?",
-        (params["playlist_id"], params["video_id"]),
+        (playlist_id, video_id),
     ).fetchone()
     conn.close()
     if row and row["playlist_item_id"]:
-        await progress(50.0, "Removing from YouTube...")
         client.remove_from_playlist(row["playlist_item_id"])
     conn = get_connection(db_path)
     conn.execute(
         "UPDATE playlist_videos SET removed_at = datetime('now') "
         "WHERE playlist_id = ? AND video_id = ? AND removed_at IS NULL",
-        (params["playlist_id"], params["video_id"]),
+        (playlist_id, video_id),
     )
     conn.commit()
     conn.close()
-    await progress(100.0, "Video removed")
+    return {"removed": video_id}
 
 
-async def handle_reorder(params, progress):
+async def handle_reorder(playlist_id: str, video_ids: list[str]) -> dict:
     """Reorder videos in a playlist (local DB only)."""
     from youtube_helper.config.settings import Settings
     from youtube_helper.db.connection import get_connection
@@ -407,71 +310,68 @@ async def handle_reorder(params, progress):
     settings = Settings()
     db_path = str(settings.db_path)
     conn = get_connection(db_path)
-    for i, vid in enumerate(params["video_ids"]):
+    for i, vid in enumerate(video_ids):
         conn.execute(
             "UPDATE playlist_videos SET position = ? "
             "WHERE playlist_id = ? AND video_id = ?",
-            (i, params["playlist_id"], vid),
+            (i, playlist_id, vid),
         )
     conn.commit()
     conn.close()
-    await progress(100.0, "Reorder saved")
+    return {"reordered": True}
 
 
-async def handle_like(params, progress):
+async def handle_like(video_id: str) -> dict:
     """Like a YouTube video."""
     from youtube_helper.config.settings import Settings
     from youtube_helper.db.connection import get_connection
 
     settings = Settings()
     youtube, _ = _get_youtube_client(str(settings.db_path))
-    await progress(50.0, "Liking video...")
     youtube.videos().rate(
-        id=params["video_id"], rating="like",
+        id=video_id, rating="like",
     ).execute()
     conn = get_connection(str(settings.db_path))
     conn.execute(
         "INSERT INTO liked_videos (video_id, liked_at) "
         "VALUES (?, datetime('now')) "
         "ON CONFLICT(video_id) DO UPDATE SET liked_at=datetime('now'), removed_at=NULL",
-        (params["video_id"],),
+        (video_id,),
     )
     conn.commit()
     conn.close()
-    await progress(100.0, "Video liked")
+    return {"video_id": video_id, "status": "liked"}
 
 
-async def handle_unlike(params, progress):
+async def handle_unlike(video_id: str) -> dict:
     """Remove like from a YouTube video."""
     from youtube_helper.config.settings import Settings
     from youtube_helper.db.connection import get_connection
 
     settings = Settings()
     youtube, _ = _get_youtube_client(str(settings.db_path))
-    await progress(50.0, "Removing like...")
     youtube.videos().rate(
-        id=params["video_id"], rating="none",
+        id=video_id, rating="none",
     ).execute()
     conn = get_connection(str(settings.db_path))
     conn.execute(
         "UPDATE liked_videos SET removed_at = datetime('now') "
         "WHERE video_id = ? AND removed_at IS NULL",
-        (params["video_id"],),
+        (video_id,),
     )
     conn.commit()
     conn.close()
-    await progress(100.0, "Like removed")
+    return {"video_id": video_id, "status": "unliked"}
 
 
-async def handle_like_all(params, progress):
-    """Like all videos in a playlist."""
+async def handle_like_all(video_ids: list[str]) -> dict:
+    """Like all specified videos."""
     from youtube_helper.config.settings import Settings
     from youtube_helper.db.connection import get_connection
 
     settings = Settings()
     youtube, _ = _get_youtube_client(str(settings.db_path))
-    video_ids = params["video_ids"]
-    for i, vid in enumerate(video_ids):
+    for vid in video_ids:
         youtube.videos().rate(id=vid, rating="like").execute()
         conn = get_connection(str(settings.db_path))
         conn.execute(
@@ -482,5 +382,4 @@ async def handle_like_all(params, progress):
         )
         conn.commit()
         conn.close()
-        pct = (i + 1) / len(video_ids) * 100
-        await progress(pct, f"Liked {i + 1}/{len(video_ids)}")
+    return {"liked": len(video_ids)}
