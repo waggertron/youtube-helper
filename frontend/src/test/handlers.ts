@@ -14,6 +14,8 @@ export const handlers = [
     return HttpResponse.json({ query: url.searchParams.get('q'), results: [] })
   }),
   http.post('/api/sync', () => HttpResponse.json({ status: 'running', message: 'Sync started' })),
+  http.get('/api/sync/status', () => HttpResponse.json({ status: 'idle', progress: 0, message: '', error: null })),
+  http.get('/api/watch-later/purge/status', () => HttpResponse.json({ status: 'idle', progress: 0, message: '', error: null })),
   http.post('/api/reset', () => HttpResponse.json({ message: 'Database cleared' })),
   http.post('/api/auth/upload-secret', () => HttpResponse.json({ message: 'Client secret saved' })),
   http.get('/api/auth/start', () =>

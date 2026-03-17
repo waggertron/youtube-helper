@@ -65,6 +65,44 @@ describe('Dashboard', () => {
     await waitFor(() => expect(screen.getByText('3')).toBeInTheDocument())
   })
 
+  it('shows sync progress when sync is running', async () => {
+    server.use(
+      http.get('/api/sync/status', () =>
+        HttpResponse.json({ status: 'running', progress: 50, message: 'Syncing playlists...', error: null })
+      ),
+    )
+    renderWithProviders(<Dashboard />)
+    await waitFor(() => {
+      expect(screen.getAllByRole('progressbar').length).toBeGreaterThanOrEqual(1)
+      expect(screen.getByText('Syncing playlists...')).toBeInTheDocument()
+    })
+  })
+
+  it('shows sync completion message', async () => {
+    server.use(
+      http.get('/api/sync/status', () =>
+        HttpResponse.json({ status: 'completed', progress: 100, message: 'Synced 12 playlists', error: null })
+      ),
+    )
+    renderWithProviders(<Dashboard />)
+    await waitFor(() => {
+      expect(screen.getByText(/Sync complete/)).toBeInTheDocument()
+    })
+  })
+
+  it('disables sync button when sync is running', async () => {
+    server.use(
+      http.get('/api/sync/status', () =>
+        HttpResponse.json({ status: 'running', progress: 50, message: 'Processing playlists...', error: null })
+      ),
+    )
+    renderWithProviders(<Dashboard />)
+    await waitFor(() => {
+      const button = screen.getByRole('button', { name: /syncing/i })
+      expect(button).toBeDisabled()
+    })
+  })
+
   it('sync button triggers mutation', async () => {
     let syncCalled = false
     server.use(
